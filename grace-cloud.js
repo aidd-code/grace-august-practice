@@ -57,7 +57,7 @@ function publicUrl(path) {
 }
 
 function isImagePath(path = "") {
-  return /\.(?:jpe?g|png|webp|gif)$/i.test(path.split("?")[0]);
+  return /\.(?:jpe?g|png|webp|gif|heic|heif)$/i.test(path.split("?")[0]);
 }
 
 function parseScoreData(row) {

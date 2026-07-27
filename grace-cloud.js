@@ -13,7 +13,7 @@ let isAdmin = false;
 const style = document.createElement("style");
 style.textContent = `
   .score-shell{position:fixed;z-index:40;inset:0;display:none;background:#f5eff6;color:#312b3a}
-  .score-shell.show{display:grid;grid-template-columns:minmax(330px,38%) 1fr}
+  .score-shell.show,.score-shell:target{display:grid;grid-template-columns:minmax(330px,38%) 1fr}
   .score-sidebar{overflow:auto;padding:24px;background:#fffdf9;border-right:1px solid rgba(80,62,96,.14)}
   .score-viewer{display:flex;flex-direction:column;min-width:0;background:#ddd7df}
   .score-viewer iframe{width:100%;height:100%;border:0;background:white}
@@ -26,14 +26,14 @@ style.textContent = `
   .cloud-tabs{display:flex;gap:8px;margin:0 0 18px;padding:4px;border-radius:14px;background:#f0eaf1}.cloud-tabs button{flex:1;min-height:42px;border:0;border-radius:11px;background:transparent;color:#756d7d;font-weight:800;cursor:pointer}.cloud-tabs button.active{color:white;background:#725c8f}
   .cloud-pane{display:none}.cloud-pane.active{display:block}.cloud-card{margin:10px 0;padding:15px;border:1px solid rgba(80,62,96,.12);border-radius:16px;background:#fff}.cloud-card h3{margin:0 0 5px;font-size:16px}.cloud-meta{color:#756d7d;font-size:12px;line-height:1.5}.cloud-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.cloud-actions button,.cloud-actions a{min-height:38px;padding:0 12px;border:0;border-radius:11px;color:#57436f;background:#eee8f1;font-weight:750;text-decoration:none;cursor:pointer}.cloud-actions .open-score{color:white;background:#725c8f}
   .cloud-empty{padding:30px 12px;color:#756d7d;text-align:center}.cloud-form{display:grid;gap:12px;margin:14px 0;padding:16px;border-radius:16px;background:#f7f3f7}.cloud-form label{display:grid;gap:6px;color:#57436f;font-size:13px;font-weight:800}.cloud-form input,.cloud-form select,.cloud-form textarea{width:100%;min-height:44px;padding:10px 12px;border:1px solid rgba(80,62,96,.15);border-radius:11px;background:white}.cloud-form textarea{min-height:86px}.cloud-form button{min-height:44px;border:0;border-radius:12px;color:white;background:#725c8f;font-weight:800;cursor:pointer}.cloud-form .secondary{color:#57436f;background:#e9e2ec}.cloud-status{min-height:22px;color:#756d7d;font-size:13px}.admin-only{display:none}.admin-only.show{display:block}.cloud-inline{display:grid;grid-template-columns:1fr 1fr;gap:10px}.cloud-badge{display:inline-block;padding:4px 8px;border-radius:8px;background:#edf3ee;color:#567361;font-size:11px;font-weight:800}
-  @media(max-width:760px){.score-shell.show{display:block}.score-sidebar{height:100%;border:0}.score-viewer{position:fixed;z-index:2;inset:0;display:none}.score-viewer.show{display:flex}.cloud-inline{grid-template-columns:1fr}}
+  @media(max-width:760px){.score-shell.show,.score-shell:target{display:block}.score-sidebar{height:100%;border:0}.score-viewer{position:fixed;z-index:2;inset:0;display:none}.score-viewer.show{display:flex}.cloud-inline{grid-template-columns:1fr}}
 `;
 document.head.appendChild(style);
 
 document.body.insertAdjacentHTML("beforeend", `
   <section class="score-shell" id="scoreShell" aria-label="Grace 乐谱库">
     <div class="score-sidebar">
-      <div class="library-head"><h2>Grace 乐谱库</h2><span class="spacer"></span><button id="closeScoreShell" type="button" aria-label="关闭">×</button></div>
+      <div class="library-head"><h2>Grace 乐谱库</h2><span class="spacer"></span><a href="#" id="closeScoreShell" aria-label="关闭" style="display:grid;place-items:center;width:42px;height:42px;border-radius:50%;font-size:24px;background:#f0eaf1;color:#57436f;text-decoration:none">×</a></div>
       <div class="cloud-tabs">
         <button class="active" data-cloud-tab="library" type="button">浏览乐谱</button>
         <button data-cloud-tab="admin" type="button">管理内容</button>

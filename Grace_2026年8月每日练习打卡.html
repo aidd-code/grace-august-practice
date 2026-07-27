@@ -316,6 +316,7 @@
           <button id="typeB" type="button">B 日</button>
         </div>
         <span class="spacer"></span>
+        <button class="primary-btn" id="scoreLibraryBtn" type="button" onclick="document.getElementById('scoreShell')?.classList.add('show');document.body.style.overflow='hidden'">乐谱库</button>
         <button class="ghost-btn" id="openAll" type="button">展开全部</button>
         <button class="ghost-btn" id="dataBtn" type="button">备份数据</button>
       </div>
@@ -537,6 +538,7 @@
             <span class="time-pill">${data.seconds ? formatClock(data.seconds) : targetText(item)}</span><span class="chevron">⌄</span>
           </button>
           <div class="card-body">
+            ${item.scoreUrl ? `<div style="margin-bottom:14px"><button class="primary-btn" data-score-url="${escapeHtml(item.scoreUrl)}" data-score-title="${escapeHtml(item.title)}" type="button">打开关联乐谱</button></div>` : ""}
             <p class="translation">${escapeHtml(item.translation)}</p>
             <h4 class="focus-title">今天要注意</h4>
             <div class="task-checks">${checks}</div>
@@ -563,6 +565,9 @@
         card.querySelectorAll("[data-check]").forEach(input => input.addEventListener("change", () => {
           getItem(selectedDay, index).checks[input.dataset.check] = input.checked; saveState();
         }));
+        card.querySelector("[data-score-url]")?.addEventListener("click", event => {
+          window.openGraceScore?.(event.currentTarget.dataset.scoreUrl, event.currentTarget.dataset.scoreTitle);
+        });
         card.querySelectorAll("[data-field]").forEach(field => field.addEventListener("input", () => {
           getItem(selectedDay, index)[field.dataset.field] = field.value; saveState();
         }));
@@ -672,6 +677,10 @@
 
     renderCalendar();
     renderDay();
+    window.gracePlans = plans;
+    window.graceRender = () => { renderCalendar(); renderDay(); };
+    window.graceSelectedDay = () => selectedDay;
   </script>
+  <script type="module" src="grace-cloud.js?v=20260727-2"></script>
 </body>
 </html>

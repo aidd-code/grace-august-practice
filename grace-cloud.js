@@ -139,6 +139,7 @@ document.addEventListener("grace:score-manage", event => openPracticeScoreManage
 
 window.deleteGracePracticeScore = async context => {
   if (!confirm(`确定删除“${context.title}”当前关联的乐谱吗？`)) return;
+  await supabase.from("practice_score_links").delete().eq("plan_type",context.type).eq("sort_order",context.index+1);
   if (context.scorePath) await supabase.storage.from("scores").remove([context.scorePath]);
   if (context.scoreId) await supabase.from("scores").delete().eq("id", context.scoreId);
   if (context.practiceId) await supabase.from("practice_items").update({score_id:null}).eq("id", context.practiceId);
@@ -238,7 +239,20 @@ function setAdminState(value) {
 
 async function loadRemotePractice() {
   const { data, error } = await supabase.from("practice_items").select("*, scores(title,file_path)").eq("active", true).order("plan_type").order("sort_order");
-  if (error || !data?.length || !window.gracePlans) return;
+  const linksResult = await supabase.from("practice_score_links").select("plan_type,sort_order,score_id,scores(title,file_path,page_count)");
+  const links = linksResult.data || [];
+  if (!window.gracePlans) return;
+  for (const type of ["A", "B"]) {
+    window.gracePlans[type].forEach((item, index) => {
+      const link = links.find(row => row.plan_type === type && row.sort_order === index + 1);
+      if (!link) return;
+      item.scoreId = link.score_id;
+      item.scorePath = link.scores?.file_path || null;
+      item.scorePages = link.scores?.page_count || null;
+      item.scoreUrl = link.scores?.file_path ? publicUrl(link.scores.file_path) : null;
+    });
+  }
+  if (error || !data?.length) { window.graceRender?.(); return; }
   for (const type of ["A", "B"]) {
     const rows = data.filter(row => row.plan_type === type);
     if (rows.length) window.gracePlans[type] = rows.map(row => ({
@@ -248,14 +262,6 @@ async function loadRemotePractice() {
     }));
   }
   window.graceRender?.();
-}
-
-async function ensurePracticeRow(context) {
-  if (context.practiceId) return context.practiceId;
-  const payload = {plan_type:context.type,sort_order:context.index+1,title:context.title,minutes:context.minutes||0,translation:context.translation||"",tasks:context.tasks||[],question:context.question||null,active:true};
-  const result = await supabase.from("practice_items").insert(payload).select("id").single();
-  if (result.error) throw result.error;
-  return result.data.id;
 }
 
 async function loadPracticeAdmin() {
@@ -336,10 +342,10 @@ $("practiceScoreForm").addEventListener("submit", async event => {
   const insert = await supabase.from("scores").insert({title:$('practiceScoreTitle').value.trim(),composer:$('practiceScoreComposer').value.trim(),notes:$('practiceScoreNotes').value.trim(),file_path:path,page_count:pages,is_public:true});
   if (insert.error) { await supabase.storage.from("scores").remove([path]); return $("practiceScoreStatus").textContent = `保存失败：${insert.error.message}`; }
   const score = (await supabase.from("scores").select("id").eq("file_path",path).maybeSingle()).data;
-  let practiceId;
-  try { practiceId = await ensurePracticeRow(practiceScoreContext); }
-  catch (error) { return $("practiceScoreStatus").textContent = `关联失败：${error.message}`; }
-  if (score?.id) await supabase.from("practice_items").update({score_id:score.id}).eq("id",practiceId);
+  if (score?.id) {
+    const linkResult = await supabase.from("practice_score_links").upsert({plan_type:practiceScoreContext.type,sort_order:practiceScoreContext.index+1,score_id:score.id,updated_at:new Date().toISOString()});
+    if (linkResult.error) return $("practiceScoreStatus").textContent = `关联失败：${linkResult.error.message}`;
+  }
   if (practiceScoreContext.scorePath) await supabase.storage.from("scores").remove([practiceScoreContext.scorePath]);
   if (practiceScoreContext.scoreId) await supabase.from("scores").delete().eq("id",practiceScoreContext.scoreId);
   $("practiceScoreModal").classList.remove("show");

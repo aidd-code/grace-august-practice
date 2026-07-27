@@ -2,15 +2,17 @@
   const base = "https://vtykowjeuwrplrzzprnz.supabase.co";
   const key = "sb_publishable_WF5o9sLcoRuur5eIvL-J-g_qt350-ye";
   const headers = { apikey: key, Authorization: `Bearer ${key}` };
+  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"]);
+  const extensions = {"application/pdf":"pdf", "image/jpeg":"jpg", "image/png":"png", "image/webp":"webp", "image/gif":"gif"};
   let context = null;
 
   function safe(value = "") {
     return String(value).replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]));
   }
 
-  function fileName(name) {
-    const baseName = name.replace(/\.pdf$/i, "").normalize("NFKD").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "score";
-    return `${Date.now()}-${baseName}.pdf`;
+  function fileName(file) {
+    const baseName = file.name.replace(/\.[^.]+$/i, "").normalize("NFKD").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "score";
+    return `${Date.now()}-${baseName}.${extensions[file.type]}`;
   }
 
   function publicUrl(path) {
@@ -24,7 +26,7 @@
       <form class="cloud-form" id="collabScoreForm">
         <label>乐谱名称<input id="collabScoreTitle" required></label>
         <label>作曲家<input id="collabScoreComposer" placeholder="可选"></label>
-        <label>选择 PDF（最大 25 MB）<input id="collabScoreFile" type="file" accept="application/pdf" required></label>
+        <label>选择 PDF 或图片（最大 25 MB）<input id="collabScoreFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/gif" required></label>
         <label>备注<textarea id="collabScoreNotes" placeholder="版本、乐章或说明"></textarea></label>
         <button type="submit">上传并自动关联</button><button class="secondary" id="collabScoreCancel" type="button">取消</button>
         <div class="cloud-status" id="collabScoreStatus"></div>
@@ -63,14 +65,14 @@
     event.preventDefault();
     const file = document.getElementById("collabScoreFile").files[0];
     const status = document.getElementById("collabScoreStatus");
-    if (!file || file.type !== "application/pdf") return status.textContent = "请选择 PDF 文件";
-    if (file.size > 25 * 1024 * 1024) return status.textContent = "PDF 不能超过 25 MB";
+    if (!file || !allowedTypes.has(file.type)) return status.textContent = "请选择 PDF、JPG、PNG、WebP 或 GIF 文件";
+    if (file.size > 25 * 1024 * 1024) return status.textContent = "文件不能超过 25 MB";
     status.textContent = "正在上传并关联…";
-    const path = fileName(file.name);
+    const path = fileName(file);
     let scoreId = null;
     try {
-      await request(`/storage/v1/object/scores/${encodeURIComponent(path)}`, { method:"POST", headers:{"Content-Type":"application/pdf","x-upsert":"false"}, body:file });
-      const pages = await countPdfPages(file);
+      await request(`/storage/v1/object/scores/${encodeURIComponent(path)}`, { method:"POST", headers:{"Content-Type":file.type,"x-upsert":"false"}, body:file });
+      const pages = file.type === "application/pdf" ? await countPdfPages(file) : null;
       const scores = await request("/rest/v1/scores?select=id", { method:"POST", headers:{"Content-Type":"application/json",Prefer:"return=representation"}, body:JSON.stringify({title:document.getElementById("collabScoreTitle").value.trim(),composer:document.getElementById("collabScoreComposer").value.trim(),notes:document.getElementById("collabScoreNotes").value.trim(),file_path:path,page_count:pages,is_public:true}) });
       const score = scores?.[0];
       if (!score) throw new Error("没有生成乐谱记录");

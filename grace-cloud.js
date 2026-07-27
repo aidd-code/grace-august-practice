@@ -11,7 +11,7 @@ style.textContent = `
   .score-shell.show,.score-shell:target{display:grid;grid-template-columns:minmax(330px,38%) 1fr}
   .score-sidebar{overflow:auto;padding:24px;background:#fffdf9;border-right:1px solid rgba(80,62,96,.14)}
   .score-viewer{display:flex;flex-direction:column;min-width:0;background:#ddd7df}
-  .score-viewer iframe{width:100%;height:100%;border:0;background:white}
+  .score-viewer iframe{width:100%;height:100%;border:0;background:white}.score-viewer-image{display:none;box-sizing:border-box;width:100%;height:100%;padding:20px;object-fit:contain;background:#211f22}
   .score-toolbar{display:flex;gap:10px;align-items:center;min-height:66px;padding:10px 16px;background:#725c8f;color:white}
   .score-toolbar strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.score-toolbar .spacer{flex:1}
   .score-toolbar button,.score-toolbar a{display:grid;place-items:center;min-height:42px;padding:0 14px;border:0;border-radius:12px;color:#57436f;background:white;font-weight:750;text-decoration:none;cursor:pointer}
@@ -31,13 +31,13 @@ document.body.insertAdjacentHTML("beforeend", `
   <section class="score-shell" id="scoreShell" aria-label="Grace 乐谱库">
     <div class="score-sidebar">
       <div class="library-head"><h2>Grace 乐谱库</h2><span class="spacer"></span><a class="library-close" href="#" id="closeScoreShell" aria-label="关闭">×</a></div>
-      <p class="library-intro">学生和老师都可以阅读和删除这里的乐谱。上传或替换请在相应打卡条的“乐谱”处操作，上传后会自动关联。</p>
+      <p class="library-intro">学生和老师都可以阅读和删除 PDF 或图片乐谱。上传或替换请在相应打卡条的“乐谱”处操作，上传后会自动关联。</p>
       <input id="scoreSearch" type="search" placeholder="搜索作曲家或乐谱名称" style="box-sizing:border-box;width:100%;min-height:46px;padding:0 14px;border:1px solid rgba(80,62,96,.15);border-radius:13px">
       <div id="scoreList"><div class="cloud-empty">正在读取乐谱库…</div></div>
     </div>
     <div class="score-viewer" id="scoreViewer">
       <div class="score-toolbar"><button id="backToLibrary" type="button">返回</button><strong id="viewerTitle">请选择乐谱</strong><span class="spacer"></span><a id="openScoreNew" href="#" target="_blank" rel="noopener">新窗口</a><button id="closeViewer" type="button">关闭</button></div>
-      <iframe id="scoreFrame" title="PDF 乐谱阅读器"></iframe>
+      <iframe id="scoreFrame" title="PDF 乐谱阅读器"></iframe><img class="score-viewer-image" id="scoreImage" alt="乐谱图片">
     </div>
   </section>
 `);
@@ -51,6 +51,10 @@ function escapeText(value = "") {
 
 function publicUrl(path) {
   return supabase.storage.from("scores").getPublicUrl(path).data.publicUrl;
+}
+
+function isImagePath(path = "") {
+  return /\.(?:jpe?g|png|webp|gif)$/i.test(path.split("?")[0]);
 }
 
 function notify(message) {
@@ -69,14 +73,25 @@ function closeShell(event) {
   shell.classList.remove("show");
   $("scoreViewer").classList.remove("show");
   $("scoreFrame").src = "about:blank";
+  $("scoreImage").removeAttribute("src");
   document.body.style.overflow = "";
   if (location.hash === "#scoreShell") history.replaceState(null, "", location.pathname + location.search);
 }
 
 window.openGraceLibrary = openShell;
-window.openGraceScore = (url, title = "PDF 乐谱") => {
+window.openGraceScore = (url, title = "乐谱") => {
   openShell();
-  $("scoreFrame").src = url;
+  const image = isImagePath(url);
+  $("scoreFrame").style.display = image ? "none" : "block";
+  $("scoreImage").style.display = image ? "block" : "none";
+  if (image) {
+    $("scoreFrame").src = "about:blank";
+    $("scoreImage").src = url;
+    $("scoreImage").alt = title;
+  } else {
+    $("scoreImage").removeAttribute("src");
+    $("scoreFrame").src = url;
+  }
   $("viewerTitle").textContent = title;
   $("openScoreNew").href = url;
   $("scoreViewer").classList.add("show");
@@ -98,8 +113,9 @@ function renderScores() {
   $("scoreList").innerHTML = rows.length ? rows.map(row => {
     const url = publicUrl(row.file_path);
     const date = row.created_at ? new Date(row.created_at).toLocaleDateString("zh-CN") : "";
-    return `<article class="cloud-card"><h3>${escapeText(row.title)}</h3><div class="cloud-meta">${escapeText(row.composer || "未填写作曲家")}${row.page_count ? ` · ${row.page_count} 页` : ""}${date ? ` · ${date}` : ""}</div>${row.notes ? `<p style="line-height:1.55">${escapeText(row.notes)}</p>` : ""}<div class="cloud-actions"><button class="open-score" data-open-score="${escapeText(url)}" data-title="${escapeText(row.title)}" type="button">阅读乐谱</button><a href="${escapeText(url)}" target="_blank" rel="noopener">新窗口打开</a><button class="danger-btn" data-delete-score="${row.id}" data-path="${escapeText(row.file_path)}" data-title="${escapeText(row.title)}" type="button">删除</button></div></article>`;
-  }).join("") : `<div class="cloud-empty">${term ? "没有找到匹配的乐谱" : "乐谱库还是空的。请从某条打卡内容里上传第一份 PDF。"}</div>`;
+    const fileType = isImagePath(row.file_path) ? "图片" : "PDF";
+    return `<article class="cloud-card"><h3>${escapeText(row.title)}</h3><div class="cloud-meta">${fileType} · ${escapeText(row.composer || "未填写作曲家")}${row.page_count ? ` · ${row.page_count} 页` : ""}${date ? ` · ${date}` : ""}</div>${row.notes ? `<p style="line-height:1.55">${escapeText(row.notes)}</p>` : ""}<div class="cloud-actions"><button class="open-score" data-open-score="${escapeText(url)}" data-title="${escapeText(row.title)}" type="button">阅读乐谱</button><a href="${escapeText(url)}" target="_blank" rel="noopener">新窗口打开</a><button class="danger-btn" data-delete-score="${row.id}" data-path="${escapeText(row.file_path)}" data-title="${escapeText(row.title)}" type="button">删除</button></div></article>`;
+  }).join("") : `<div class="cloud-empty">${term ? "没有找到匹配的乐谱" : "乐谱库还是空的。请从某条打卡内容里上传第一份 PDF 或图片。"}</div>`;
   $("scoreList").querySelectorAll("[data-open-score]").forEach(button => button.addEventListener("click", () => window.openGraceScore(button.dataset.openScore, button.dataset.title)));
   $("scoreList").querySelectorAll("[data-delete-score]").forEach(button => button.addEventListener("click", () => deleteScore(button.dataset.deleteScore, button.dataset.path, button.dataset.title)));
 }
@@ -117,8 +133,14 @@ async function deleteScore(id, path, title) {
 
 $("scoreLibraryBtn")?.addEventListener("click", event => { event.preventDefault(); openShell(); });
 $("closeScoreShell").addEventListener("click", closeShell);
-$("closeViewer").addEventListener("click", () => $("scoreViewer").classList.remove("show"));
-$("backToLibrary").addEventListener("click", () => $("scoreViewer").classList.remove("show"));
+function closeViewer() {
+  $("scoreViewer").classList.remove("show");
+  $("scoreFrame").src = "about:blank";
+  $("scoreImage").removeAttribute("src");
+}
+
+$("closeViewer").addEventListener("click", closeViewer);
+$("backToLibrary").addEventListener("click", closeViewer);
 $("scoreSearch").addEventListener("input", renderScores);
 window.addEventListener("grace:scores-changed", loadScores);
 

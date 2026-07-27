@@ -52,6 +52,7 @@
     .eyebrow { color: var(--purple); font-size: 14px; font-weight: 800; letter-spacing: .16em; }
     h1 { margin: 8px 0 8px; font-family: Georgia, "Songti SC", serif; font-size: clamp(34px, 5vw, 58px); font-weight: 500; line-height: 1.05; }
     .subtitle { margin: 0; color: var(--muted); font-size: 17px; }
+    .hero-side { display: flex; flex-direction: column; align-items: flex-end; gap: 22px; }
     .month-mark { color: var(--purple); font-family: Georgia, serif; font-size: 78px; line-height: .8; opacity: .18; }
 
     .month-panel, .day-panel {
@@ -263,8 +264,10 @@
 
     @media (max-width: 720px) {
       .app { padding: 0 14px 48px; }
-      .hero { padding-top: calc(24px + env(safe-area-inset-top)); }
+      .hero { align-items: start; gap: 12px; padding-top: calc(24px + env(safe-area-inset-top)); }
+      .hero-side { gap: 0; }
       .month-mark { display: none; }
+      .hero .auth-btn { min-height: 40px; padding: 0 12px; white-space: nowrap; }
       .month-panel { padding: 14px 10px; }
       .calendar { gap: 5px; }
       .date-btn { min-height: 58px; padding: 7px 2px; border-radius: 13px; }
@@ -301,7 +304,10 @@
         <h1>Grace 的八月练习花园</h1>
         <p class="subtitle">每天专注一点点，让音乐慢慢开花。</p>
       </div>
-      <div class="month-mark" aria-hidden="true">08</div>
+      <div class="hero-side">
+        <div class="month-mark" aria-hidden="true">08</div>
+        <button class="auth-btn" id="authBtn" type="button">密码登录</button>
+      </div>
     </header>
 
     <section class="month-panel" aria-label="2026年8月日历">
@@ -330,7 +336,6 @@
         </div>
         <span class="spacer"></span>
         <a class="primary-btn" id="scoreLibraryBtn" href="#scoreShell" style="display:grid;place-items:center;text-decoration:none">乐谱库</a>
-        <button class="auth-btn" id="authBtn" type="button">密码登录</button>
         <button class="ghost-btn" id="openAll" type="button">展开全部</button>
         <button class="ghost-btn edit-only" id="dataBtn" type="button">备份数据</button>
       </div>

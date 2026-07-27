@@ -135,6 +135,7 @@ function openPracticeScoreManager(context) {
 }
 
 window.openGracePracticeScoreManager = openPracticeScoreManager;
+document.addEventListener("grace:score-manage", event => openPracticeScoreManager(event.detail));
 
 window.deleteGracePracticeScore = async context => {
   if (!confirm(`确定删除“${context.title}”当前关联的乐谱吗？`)) return;
@@ -144,6 +145,7 @@ window.deleteGracePracticeScore = async context => {
   await loadScores(); await loadRemotePractice();
   notify("这项练习的乐谱已删除");
 };
+document.addEventListener("grace:score-delete", event => window.deleteGracePracticeScore(event.detail));
 
 window.openGraceLibrary = () => openShell("library");
 

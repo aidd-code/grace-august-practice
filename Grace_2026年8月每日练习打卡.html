@@ -579,15 +579,15 @@
         });
         card.querySelector("[data-score-card-replace]")?.addEventListener("click", event => {
           event.stopPropagation();
-          window.openGracePracticeScoreManager?.({type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id, scoreId:item.scoreId, scoreUrl:item.scoreUrl, scorePath:item.scorePath});
+          document.dispatchEvent(new CustomEvent("grace:score-manage", {detail:{type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id, scoreId:item.scoreId, scoreUrl:item.scoreUrl, scorePath:item.scorePath}}));
         });
         card.querySelector("[data-score-card-delete]")?.addEventListener("click", event => {
           event.stopPropagation();
-          window.deleteGracePracticeScore?.({type, index, title:item.title, practiceId:item.id, scoreId:item.scoreId, scorePath:item.scorePath});
+          document.dispatchEvent(new CustomEvent("grace:score-delete", {detail:{type, index, title:item.title, practiceId:item.id, scoreId:item.scoreId, scorePath:item.scorePath}}));
         });
         card.querySelector("[data-score-card-upload]")?.addEventListener("click", event => {
           event.stopPropagation();
-          window.openGracePracticeScoreManager?.({type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id});
+          document.dispatchEvent(new CustomEvent("grace:score-manage", {detail:{type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id}}));
         });
         card.querySelectorAll("[data-field]").forEach(field => field.addEventListener("input", () => {
           getItem(selectedDay, index)[field.dataset.field] = field.value; saveState();
@@ -702,6 +702,6 @@
     window.graceRender = () => { renderCalendar(); renderDay(); };
     window.graceSelectedDay = () => selectedDay;
   </script>
-  <script type="module" src="grace-cloud.js?v=20260727-5"></script>
+  <script type="module" src="grace-cloud.js?v=20260727-6"></script>
 </body>
 </html>

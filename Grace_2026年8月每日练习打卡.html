@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#725c8f">
+  <title>Grace 的八月练习花园</title>
+  <style>
+    :root {
+      --ink: #312b3a;
+      --muted: #756d7d;
+      --paper: rgba(255, 253, 249, .93);
+      --line: rgba(80, 62, 96, .12);
+      --purple: #725c8f;
+      --purple-dark: #57436f;
+      --peach: #e99473;
+      --sage: #7d9a86;
+      --cream: #fff8ea;
+      --shadow: 0 16px 42px rgba(62, 44, 74, .11);
+      --radius: 24px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at 8% 6%, rgba(237, 180, 152, .35), transparent 25rem),
+        radial-gradient(circle at 92% 18%, rgba(170, 151, 196, .32), transparent 28rem),
+        linear-gradient(145deg, #fbf4e9 0%, #f5eff6 48%, #eef5ef 100%);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button, input, textarea { font: inherit; }
+    button { touch-action: manipulation; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 3px solid rgba(114, 92, 143, .28);
+      outline-offset: 2px;
+    }
+
+    .app { max-width: 1180px; margin: 0 auto; padding: 0 28px 72px; }
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+      gap: 28px;
+      padding: calc(36px + env(safe-area-inset-top)) 4px 30px;
+    }
+    .eyebrow { color: var(--purple); font-size: 14px; font-weight: 800; letter-spacing: .16em; }
+    h1 { margin: 8px 0 8px; font-family: Georgia, "Songti SC", serif; font-size: clamp(34px, 5vw, 58px); font-weight: 500; line-height: 1.05; }
+    .subtitle { margin: 0; color: var(--muted); font-size: 17px; }
+    .month-mark { color: var(--purple); font-family: Georgia, serif; font-size: 78px; line-height: .8; opacity: .18; }
+
+    .month-panel, .day-panel {
+      background: var(--paper);
+      border: 1px solid rgba(255,255,255,.8);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+    .month-panel { padding: 22px; margin-bottom: 22px; }
+    .month-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }
+    .month-top h2 { margin: 0; font-size: 20px; }
+    .month-progress { color: var(--muted); font-size: 14px; }
+    .calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+    .weekday { padding: 2px 0 7px; color: var(--muted); font-size: 12px; font-weight: 700; text-align: center; }
+    .date-btn {
+      position: relative;
+      min-height: 70px;
+      padding: 9px 7px;
+      border: 1px solid transparent;
+      border-radius: 16px;
+      color: var(--ink);
+      background: rgba(246, 240, 246, .62);
+      cursor: pointer;
+      transition: transform .16s ease, background .16s ease, border-color .16s ease;
+    }
+    .date-btn:active { transform: scale(.97); }
+    .date-btn.selected { color: white; background: var(--purple); box-shadow: 0 8px 20px rgba(94, 70, 120, .25); }
+    .date-btn.today:not(.selected) { border-color: var(--peach); }
+    .date-num { display: block; font-size: 18px; font-weight: 800; }
+    .date-type { display: block; margin-top: 3px; font-size: 11px; opacity: .72; }
+    .date-dot { display: inline-block; width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: rgba(114,92,143,.22); }
+    .date-btn.some .date-dot { background: var(--peach); }
+    .date-btn.complete .date-dot { background: var(--sage); }
+    .date-btn.selected .date-dot { background: white; }
+
+    .day-panel { overflow: hidden; }
+    .day-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: center;
+      padding: 28px 30px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(110deg, rgba(250, 235, 224, .7), rgba(238, 232, 246, .72));
+    }
+    .day-kicker { color: var(--purple); font-size: 13px; font-weight: 800; letter-spacing: .12em; }
+    .day-head h2 { margin: 5px 0 7px; font-family: Georgia, "Songti SC", serif; font-size: 30px; font-weight: 500; }
+    .day-summary { color: var(--muted); font-size: 14px; }
+    .ring {
+      --p: 0;
+      display: grid;
+      place-items: center;
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: conic-gradient(var(--sage) calc(var(--p) * 1%), rgba(114,92,143,.12) 0);
+    }
+    .ring::before { content: ""; grid-area: 1/1; width: 72px; height: 72px; border-radius: 50%; background: #faf6f4; }
+    .ring span { z-index: 1; grid-area: 1/1; color: var(--purple-dark); font-size: 17px; font-weight: 850; }
+
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 18px 30px; border-bottom: 1px solid var(--line); }
+    .segmented { display: inline-flex; padding: 4px; border-radius: 14px; background: #f0eaf1; }
+    .segmented button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 11px; color: var(--muted); background: transparent; font-weight: 750; cursor: pointer; }
+    .segmented button.active { color: white; background: var(--purple); }
+    .ghost-btn, .primary-btn, .small-btn {
+      min-height: 44px;
+      border: 0;
+      border-radius: 13px;
+      padding: 0 16px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .ghost-btn { color: var(--purple-dark); background: #f0eaf1; }
+    .primary-btn { color: white; background: var(--purple); }
+    .small-btn { min-height: 38px; padding: 0 13px; color: var(--purple-dark); background: #eee8f1; }
+    .controls .spacer { flex: 1; }
+
+    .practice-list { padding: 6px 30px 30px; }
+    .practice-card { border-bottom: 1px solid var(--line); }
+    .practice-card:last-child { border-bottom: 0; }
+    .card-summary {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      gap: 15px;
+      align-items: center;
+      width: 100%;
+      min-height: 92px;
+      padding: 14px 0;
+      border: 0;
+      color: inherit;
+      text-align: left;
+      background: transparent;
+      cursor: pointer;
+    }
+    .check {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border: 2px solid rgba(114,92,143,.25);
+      border-radius: 50%;
+      color: white;
+      background: white;
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .practice-card.done .check { border-color: var(--sage); background: var(--sage); }
+    .practice-card.done .card-title { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+    .number { color: var(--peach); font-family: Georgia, serif; font-size: 13px; font-weight: 800; }
+    .card-title { display: block; margin-top: 3px; font-size: 18px; font-weight: 800; }
+    .card-meta { display: block; margin-top: 5px; color: var(--muted); font-size: 13px; }
+    .time-pill { min-width: 76px; padding: 9px 10px; border-radius: 12px; color: var(--purple-dark); background: #f2edf3; font-size: 13px; font-weight: 800; text-align: center; }
+    .chevron { color: var(--muted); font-size: 20px; transition: transform .2s; }
+    .practice-card.open .chevron { transform: rotate(180deg); }
+    .card-body { display: none; padding: 2px 0 24px 51px; }
+    .practice-card.open .card-body { display: block; }
+    .translation { margin: 0 0 18px; padding: 15px 18px; border-left: 4px solid var(--peach); border-radius: 0 14px 14px 0; background: var(--cream); line-height: 1.75; }
+    .focus-title { margin: 20px 0 9px; color: var(--purple-dark); font-size: 14px; letter-spacing: .06em; }
+    .requirements { margin: 0; padding-left: 1.2em; line-height: 1.75; }
+    .requirements li + li { margin-top: 6px; }
+    .task-checks { display: grid; gap: 8px; margin: 14px 0 18px; }
+    .task-check {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 13px;
+      background: #f7f3f7;
+      cursor: pointer;
+      line-height: 1.55;
+    }
+    .task-check input { width: 22px; height: 22px; flex: 0 0 auto; accent-color: var(--sage); }
+    .timer-row { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin-top: 17px; }
+    .timer-display { min-width: 116px; color: var(--purple-dark); font: 700 24px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .timer-btn { min-height: 44px; padding: 0 18px; border: 0; border-radius: 13px; color: white; background: var(--purple); font-weight: 800; cursor: pointer; }
+    .timer-btn.running { background: var(--peach); }
+    textarea {
+      width: 100%;
+      min-height: 92px;
+      resize: vertical;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: var(--ink);
+      background: rgba(255,255,255,.78);
+      line-height: 1.6;
+    }
+
+    .journal { padding: 26px 30px 32px; border-top: 1px solid var(--line); background: rgba(247, 243, 238, .55); }
+    .journal h3 { margin: 0 0 5px; font-family: Georgia, "Songti SC", serif; font-size: 24px; font-weight: 500; }
+    .journal-intro { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+    .journal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .prompt { padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.7); }
+    .prompt.wide { grid-column: 1 / -1; }
+    .prompt label { display: block; margin-bottom: 9px; color: var(--purple-dark); font-size: 14px; font-weight: 800; }
+    .prompt textarea { min-height: 76px; }
+    .save-note { margin-top: 12px; color: var(--muted); font-size: 12px; text-align: right; }
+
+    footer { padding: 24px 4px 0; color: var(--muted); font-size: 13px; line-height: 1.7; text-align: center; }
+    .quote { color: var(--purple-dark); font-family: Georgia, "Songti SC", serif; font-size: 17px; }
+
+    .toast {
+      position: fixed;
+      z-index: 30;
+      left: 50%;
+      bottom: calc(24px + env(safe-area-inset-bottom));
+      transform: translate(-50%, 20px);
+      padding: 12px 18px;
+      border-radius: 14px;
+      color: white;
+      background: rgba(49,43,58,.92);
+      opacity: 0;
+      pointer-events: none;
+      transition: .2s ease;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    .modal {
+      position: fixed;
+      z-index: 20;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: rgba(38,31,45,.42);
+      backdrop-filter: blur(8px);
+    }
+    .modal.show { display: grid; }
+    .modal-box { width: min(560px, 100%); padding: 26px; border-radius: 22px; background: #fffcf8; box-shadow: var(--shadow); }
+    .modal-box h3 { margin: 0 0 8px; font-size: 22px; }
+    .modal-box p { color: var(--muted); line-height: 1.65; }
+    .modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    .file-label { display: inline-grid; place-items: center; min-height: 44px; padding: 0 16px; border-radius: 13px; color: var(--purple-dark); background: #f0eaf1; font-weight: 750; cursor: pointer; }
+    .file-label input { display: none; }
+
+    @media (max-width: 720px) {
+      .app { padding: 0 14px 48px; }
+      .hero { padding-top: calc(24px + env(safe-area-inset-top)); }
+      .month-mark { display: none; }
+      .month-panel { padding: 14px 10px; }
+      .calendar { gap: 5px; }
+      .date-btn { min-height: 58px; padding: 7px 2px; border-radius: 13px; }
+      .date-num { font-size: 16px; }
+      .date-type { font-size: 10px; }
+      .day-head { padding: 22px 18px; }
+      .ring { width: 76px; height: 76px; }
+      .ring::before { width: 60px; height: 60px; }
+      .controls, .practice-list, .journal { padding-left: 18px; padding-right: 18px; }
+      .card-summary { grid-template-columns: auto minmax(0, 1fr) auto; gap: 11px; }
+      .time-pill { grid-column: 2; grid-row: 2; justify-self: start; padding: 6px 9px; }
+      .chevron { grid-column: 3; grid-row: 1 / span 2; }
+      .card-body { padding-left: 0; }
+      .journal-grid { grid-template-columns: 1fr; }
+      .prompt.wide { grid-column: auto; }
+    }
+
+    @media print {
+      body { background: white; }
+      .app { max-width: none; padding: 0; }
+      .month-panel, .controls, footer, .timer-row, .save-note { display: none; }
+      .day-panel { border: 0; box-shadow: none; }
+      .practice-card .card-body { display: block; }
+      .practice-card { break-inside: avoid; }
+      .chevron { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">DAILY PRACTICE · 2026</div>
+        <h1>Grace 的八月练习花园</h1>
+        <p class="subtitle">每天专注一点点，让音乐慢慢开花。</p>
+      </div>
+      <div class="month-mark" aria-hidden="true">08</div>
+    </header>
+
+    <section class="month-panel" aria-label="2026年8月日历">
+      <div class="month-top">
+        <h2>2026 年 8 月</h2>
+        <div class="month-progress" id="monthProgress">本月完成 0 / 31 天</div>
+      </div>
+      <div class="calendar" id="calendar"></div>
+    </section>
+
+    <section class="day-panel">
+      <header class="day-head">
+        <div>
+          <div class="day-kicker" id="dayKicker">DAY A · A 日计划</div>
+          <h2 id="dayTitle">8 月 1 日 · 星期六</h2>
+          <div class="day-summary" id="daySummary"></div>
+        </div>
+        <div class="ring" id="progressRing" aria-label="今日完成度"><span id="progressText">0%</span></div>
+      </header>
+
+      <div class="controls">
+        <span style="font-size:13px;color:var(--muted);font-weight:700">今天练：</span>
+        <div class="segmented" aria-label="切换今日计划">
+          <button id="typeA" type="button">A 日</button>
+          <button id="typeB" type="button">B 日</button>
+        </div>
+        <span class="spacer"></span>
+        <button class="ghost-btn" id="openAll" type="button">展开全部</button>
+        <button class="ghost-btn" id="dataBtn" type="button">备份数据</button>
+      </div>
+
+      <div class="practice-list" id="practiceList"></div>
+
+      <section class="journal">
+        <h3>今日练习小记</h3>
+        <p class="journal-intro">把“练了多久”变成“今天学会了什么”。内容会自动保存在这台设备中。</p>
+        <div class="journal-grid" id="journalGrid"></div>
+        <div class="save-note">自动保存 · 不需要点提交</div>
+      </section>
+    </section>
+
+    <footer>
+      <div class="quote">“专注的质量，比重复的次数更重要。”</div>
+      <div>建议在 iPad 的 Safari 中打开，并固定使用同一个浏览器；可用“分享 → 添加到主屏幕”像 App 一样使用。</div>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <div class="modal" id="dataModal" role="dialog" aria-modal="true" aria-labelledby="dataTitle">
+    <div class="modal-box">
+      <h3 id="dataTitle">练习记录备份</h3>
+      <p>记录只保存在当前浏览器里。建议每周导出一次备份；换 iPad 或清理浏览器数据后，可以再导入恢复。</p>
+      <div class="modal-actions">
+        <button class="ghost-btn" id="closeModal" type="button">取消</button>
+        <label class="file-label">导入备份<input id="importFile" type="file" accept="application/json"></label>
+        <button class="primary-btn" id="exportBtn" type="button">导出备份</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const plans = {
+      A: [
+        {
+          title: "舍夫奇克热身与左手秘密练习", minutes: 15,
+          translation: "舍夫奇克练习——15分钟。用舍夫奇克作为热身。在你选择的两根琴弦上练习“左手秘密练习”，从第一把位到第三把位。根据你的感觉，变换不同的弓法。",
+          tasks: ["手指独立起落，像小锤子一样敲击指板，避免粘连", "从第一到第三把位移动时，大拇指保持放松", "交替尝试全弓、上半弓、下半弓和连弓，换弓时声音不中断"]
+        },
+        {
+          title: "降 A 大调弗莱什音阶", minutes: 40,
+          translation: "单弦音阶、四个八度、琶音、三度和六度。重点追求优美的音色、放松的换把与稳定的音准。",
+          tasks: ["单弦四个八度：左手手肘提前预判并平移，避免手腕过度扭曲", "三度与六度：双音要纯净；不准时停下来单独慢练该把位", "监听发音，使弓速与弓压匹配，追求没有杂音的丝滑音色"]
+        },
+        {
+          title: "帕格尼尼第 5 号随想曲", minutes: 30,
+          translation: "只练开头与结尾的音阶。使用节奏变奏；在 A 弦上前后移动左手练换把；练泛音附近的“青蛙动作”；下行乐段使用左手拨弦。",
+          tasks: ["节奏变奏：练“一长三短”和“三短一长”", "A 弦换把：左手像雨刮器一样整体前后滑动", "弓根动作：手腕像青蛙跳跃一样有弹性，不僵硬压弦", "左手拨弦后手指迅速离弦，右手弓子提前准备衔接"]
+        },
+        {
+          title: "帕格尼尼第 9 号随想曲", minutes: 30,
+          translation: "只练第一部分，尽可能多使用连弓。目标是得到最平滑、最连贯圆润的声音。",
+          tasks: ["一弓多音时，左手换指与右手换弦做到零延迟同步", "想象弓子涂了黄油；食指感知弓毛摩擦力，让声音持续"]
+        },
+        {
+          title: "勃拉姆斯奏鸣曲第一乐章", minutes: 30,
+          translation: "练第一乐章呈示部。尝试不同指法与弓法，思考某些选择为什么更好，并聆听单簧管版本。",
+          tasks: ["记录两种不同指法，并写下各自优缺点", "听单簧管版的呼吸气口，思考如何用弓段分配模仿呼吸感"],
+          question: "我试了哪两种指法或弓法？为什么其中一种更好？"
+        },
+        {
+          title: "巴赫阿勒曼德与萨拉班德", minutes: 40,
+          translation: "带着强烈的律动感慢练。思考重音、结构与和声方向，并把它背下来——上课时不使用 AI 软件看谱。",
+          tasks: ["节拍器下把每拍细分为 4 个十六分音符", "在谱上标出关键和弦转换，体会紧张到解决", "用肌肉、听觉、和声三种记忆一起背谱"],
+          question: "重音在哪里？乐曲是什么结构？和声从哪里来、走向哪里？"
+        },
+        {
+          title: "欣德米特《天鹅转子》", minutes: 45,
+          translation: "复习作品：慢练、放松，并在脑海中保持稳定的细分节拍。",
+          tasks: ["演奏慢板时仍在心中快速细分，保持内在驱动力", "每个乐句后检查左手拇指、下巴和右肩；紧张就停下深呼吸"]
+        },
+        {
+          title: "诗歌作业", minutes: 15,
+          translation: "选择艾兴多尔夫或海涅最喜欢的两首诗；准备下节课凭记忆解释，不使用 AI 软件辅助阅读。",
+          tasks: ["大声朗读并背诵，感受韵律和情绪起伏", "用 1–2 句话总结核心意境，并寻找与某首乐曲的情感共鸣"],
+          question: "两首诗的核心意境是什么？它们与哪首正在练习的乐曲有共鸣？"
+        }
+      ],
+      B: [
+        {
+          title: "左手秘密练习与舍夫奇克", minutes: 20,
+          translation: "选择两根琴弦练左手秘密练习，自由变换弓法；练舍夫奇克 Op. 1，Part 1，第 17 号。",
+          tasks: ["保持手指独立与力量均衡", "让 4 指的按弦力度与 1 指相当，避免小指发音虚弱"]
+        },
+        {
+          title: "F 小调弗莱什音阶", minutes: 40,
+          translation: "练单弦音阶、四个八度、琶音、三度与六度。",
+          tasks: ["慢练降 E、降 A、降 B 的把位框架", "琶音的大跨度换把用手腕引导，确保准确"]
+        },
+        {
+          title: "帕格尼尼第 5 号随想曲 · 跳弓专项", minutes: 60,
+          translation: "跳弓部分先贴弦慢练，伸展时保持左手框架与腕臂对齐；在第五把位慢练。即使开始不够好听也坚持，用全部六种节奏变奏强化技术。",
+          tasks: ["贴弦慢练：用弓杆弹性“滚”出跳弓，不用手腕砸", "第五把位伸展时拇指提前移动，手腕平直不塌", "慢–快–快–快：连续 4 遍", "慢–快–快–慢：连续 4 遍", "快–快–慢–慢：连续 4 遍", "慢–慢–快–快：连续 4 遍", "快–慢–快–快：连续 4 遍", "快–快–快–慢：连续 4 遍"]
+        },
+        {
+          title: "勃拉姆斯奏鸣曲第三、四乐章", minutes: 60,
+          translation: "仔细视奏第三、四乐章，比较不同指法与弓法。特别注意换弦、用双音技术使换弦平滑，以及换弦时的音准。",
+          tasks: ["跨弦前右肘预先规划平滑弧线，避免直角换弦重音", "大跨度换弦用空弦＋按弦双音过渡", "每次换弦后立刻检查新弦上的音准"],
+          question: "今天比较了哪些指法或弓法？哪一种换弦更平滑，为什么？"
+        },
+        {
+          title: "巴赫前奏曲与库朗特", minutes: 40,
+          translation: "带着强烈律动慢练。思考重音、结构与和声方向，并背谱——上课时不使用 AI 软件看谱。",
+          tasks: ["库朗特强拍突出，弱拍不虚，快速音保持均匀颗粒", "找出前奏曲和声高潮，用弓速与揉弦幅度突出结构"],
+          question: "重音与高潮在哪里？和声从哪里来、走向哪里？"
+        },
+        {
+          title: "历史研究作业", minutes: 30,
+          translation: "比较勃拉姆斯生活的欧洲与同时期中国：政治发展、哲学思想、文化运动及异同；最后思考他为什么创作浪漫主义音乐。",
+          tasks: ["列出 19 世纪中后期欧洲与晚清中国的 3 个核心差异", "写下对勃拉姆斯创作动机的个人理解，准备中英文表达"],
+          question: "欧洲与中国有哪些相同与不同？古典形式与个人情感的冲突，如何影响勃拉姆斯？"
+        },
+        {
+          title: "霍夫迈斯特协奏曲", minutes: 45,
+          translation: "慢速、放松地复习作品，并用反拍节拍器强化节奏意识。",
+          tasks: ["让节拍器只响 2、4 弱拍，心中补出强拍", "慢练每个装饰音，保持典雅、精致与清晰"]
+        },
+        {
+          title: "练习寄语与每日自省", minutes: 0,
+          target: "每日自省",
+          translation: "享受过程，保持好奇；始终带着目的练习，而不是机械重复。专注的质量比重复次数更重要。",
+          tasks: ["练琴前写下今天唯一的核心目标", "练琴后检查是否达成；没达成时分析是注意力还是方法问题"],
+          question: "今天达成核心目标了吗？如果没有，原因是注意力分散，还是方法需要调整？"
+        }
+      ]
+    };
+
+    const STORAGE_KEY = "grace-practice-2026-08-v1";
+    const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
+    let state = loadState();
+    let selectedDay = Math.min(31, Math.max(1, new Date().getFullYear() === 2026 && new Date().getMonth() === 7 ? new Date().getDate() : 1));
+    let activeTimer = null;
+    let timerTick = null;
+    let allOpen = false;
+
+    function defaultState() { return { days: {}, typeOverrides: {} }; }
+    function loadState() {
+      try { return { ...defaultState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
+      catch { return defaultState(); }
+    }
+    function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    function dayKey(day) { return `2026-08-${String(day).padStart(2, "0")}`; }
+    function planType(day) { return state.typeOverrides[dayKey(day)] || (day % 2 ? "A" : "B"); }
+    function getDay(day) {
+      const key = dayKey(day);
+      if (!state.days[key]) state.days[key] = { items: {}, journal: {} };
+      return state.days[key];
+    }
+    function getItem(day, index) {
+      const dayData = getDay(day);
+      if (!dayData.items[index]) dayData.items[index] = { done: false, seconds: 0, checks: {}, note: "", answer: "" };
+      return dayData.items[index];
+    }
+    function escapeHtml(value = "") {
+      return String(value).replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]));
+    }
+    function targetText(item) { return item.target || `${item.minutes} 分钟`; }
+    function totalMinutes(type) { return plans[type].reduce((sum, item) => sum + item.minutes, 0); }
+    function formatClock(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      return h ? `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+    }
+    function dayProgress(day) {
+      const type = planType(day);
+      const completed = plans[type].filter((_, i) => getItem(day, i).done).length;
+      return { completed, total: plans[type].length, percent: Math.round(completed / plans[type].length * 100) };
+    }
+
+    function renderCalendar() {
+      const calendar = document.getElementById("calendar");
+      let html = weekdays.map(d => `<div class="weekday">${d}</div>`).join("");
+      for (let i = 0; i < 6; i++) html += `<div aria-hidden="true"></div>`;
+      const now = new Date();
+      for (let day = 1; day <= 31; day++) {
+        const progress = dayProgress(day);
+        const isToday = now.getFullYear() === 2026 && now.getMonth() === 7 && now.getDate() === day;
+        const status = progress.percent === 100 ? "complete" : progress.completed ? "some" : "";
+        html += `<button class="date-btn ${selectedDay === day ? "selected" : ""} ${isToday ? "today" : ""} ${status}" data-day="${day}" type="button" aria-label="8月${day}日，${planType(day)}日计划，完成${progress.percent}%">
+          <span class="date-num">${day}</span><span class="date-type">${planType(day)} 日</span><span class="date-dot"></span>
+        </button>`;
+      }
+      calendar.innerHTML = html;
+      calendar.querySelectorAll("[data-day]").forEach(btn => btn.addEventListener("click", () => selectDay(Number(btn.dataset.day))));
+      const completeDays = Array.from({length:31}, (_,i) => dayProgress(i+1).percent === 100).filter(Boolean).length;
+      document.getElementById("monthProgress").textContent = `本月完成 ${completeDays} / 31 天`;
+    }
+
+    function renderDay() {
+      stopTimer();
+      const type = planType(selectedDay);
+      const date = new Date(2026, 7, selectedDay);
+      const progress = dayProgress(selectedDay);
+      document.getElementById("dayKicker").textContent = `DAY ${type} · ${type} 日计划`;
+      document.getElementById("dayTitle").textContent = `8 月 ${selectedDay} 日 · 星期${weekdays[date.getDay()]}`;
+      document.getElementById("daySummary").textContent = `${plans[type].length} 项内容 · 约 ${Math.floor(totalMinutes(type)/60)} 小时 ${totalMinutes(type)%60} 分钟`;
+      document.getElementById("progressText").textContent = `${progress.percent}%`;
+      document.getElementById("progressRing").style.setProperty("--p", progress.percent);
+      document.getElementById("typeA").classList.toggle("active", type === "A");
+      document.getElementById("typeB").classList.toggle("active", type === "B");
+      renderItems();
+      renderJournal();
+    }
+
+    function renderItems() {
+      const type = planType(selectedDay);
+      const list = document.getElementById("practiceList");
+      list.innerHTML = plans[type].map((item, i) => {
+        const data = getItem(selectedDay, i);
+        const checks = item.tasks.map((task, j) => `<label class="task-check"><input type="checkbox" data-check="${j}" ${data.checks[j] ? "checked" : ""}><span>${escapeHtml(task)}</span></label>`).join("");
+        return `<article class="practice-card ${data.done ? "done" : ""} ${allOpen ? "open" : ""}" data-index="${i}">
+          <button class="card-summary" type="button" aria-expanded="${allOpen}">
+            <span class="check" role="checkbox" aria-checked="${data.done}">${data.done ? "✓" : ""}</span>
+            <span><span class="number">练习 ${String(i+1).padStart(2,"0")}</span><span class="card-title">${escapeHtml(item.title)}</span><span class="card-meta">目标 · ${targetText(item)}</span></span>
+            <span class="time-pill">${data.seconds ? formatClock(data.seconds) : targetText(item)}</span><span class="chevron">⌄</span>
+          </button>
+          <div class="card-body">
+            <p class="translation">${escapeHtml(item.translation)}</p>
+            <h4 class="focus-title">今天要注意</h4>
+            <div class="task-checks">${checks}</div>
+            ${item.question ? `<h4 class="focus-title">想一想，再写下来</h4><p style="line-height:1.65;margin:0 0 10px">${escapeHtml(item.question)}</p><textarea data-field="answer" placeholder="写下 Grace 自己的想法……">${escapeHtml(data.answer)}</textarea>` : ""}
+            <h4 class="focus-title">练习计时与笔记</h4>
+            <div class="timer-row"><span class="timer-display" data-clock>${formatClock(data.seconds)}</span><button class="timer-btn" data-timer type="button">开始计时</button><button class="small-btn" data-add="300" type="button">+5 分钟</button><button class="small-btn" data-add="-300" type="button">−5 分钟</button></div>
+            <textarea data-field="note" placeholder="老师的提醒、今天发现的问题……" style="margin-top:12px">${escapeHtml(data.note)}</textarea>
+          </div>
+        </article>`;
+      }).join("");
+
+      list.querySelectorAll(".practice-card").forEach(card => {
+        const index = Number(card.dataset.index);
+        card.querySelector(".card-summary").addEventListener("click", event => {
+          if (event.target.closest(".check")) {
+            event.stopPropagation();
+            toggleDone(index);
+            return;
+          }
+          card.classList.toggle("open");
+          card.querySelector(".card-summary").setAttribute("aria-expanded", card.classList.contains("open"));
+        });
+        card.querySelector(".check").addEventListener("click", event => { event.stopPropagation(); toggleDone(index); });
+        card.querySelectorAll("[data-check]").forEach(input => input.addEventListener("change", () => {
+          getItem(selectedDay, index).checks[input.dataset.check] = input.checked; saveState();
+        }));
+        card.querySelectorAll("[data-field]").forEach(field => field.addEventListener("input", () => {
+          getItem(selectedDay, index)[field.dataset.field] = field.value; saveState();
+        }));
+        card.querySelector("[data-timer]").addEventListener("click", () => toggleTimer(index));
+        card.querySelectorAll("[data-add]").forEach(btn => btn.addEventListener("click", () => {
+          const data = getItem(selectedDay, index);
+          data.seconds = Math.max(0, data.seconds + Number(btn.dataset.add));
+          saveState(); updateItemTime(index);
+        }));
+      });
+    }
+
+    function renderJournal() {
+      const type = planType(selectedDay);
+      const prompts = [
+        ["goal", "今天唯一的核心目标", "例如：只解决 No. 5 的跳弓问题"],
+        ["learned", "今天最满意的一件事", "哪个声音、动作或想法变得更好了？"],
+        ["next", "明天从哪里继续", "还没有解决的问题是什么？"],
+        ["research", type === "B" ? "研究问题速记" : "音乐与诗歌的联想", type === "B" ? "写下今天查到的历史线索或新问题" : "记下结构、和声、呼吸或诗意的发现"]
+      ];
+      const journal = getDay(selectedDay).journal;
+      document.getElementById("journalGrid").innerHTML = prompts.map((p, i) => `<div class="prompt ${i === 0 ? "wide" : ""}"><label for="journal-${p[0]}">${p[1]}</label><textarea id="journal-${p[0]}" data-journal="${p[0]}" placeholder="${p[2]}">${escapeHtml(journal[p[0]] || "")}</textarea></div>`).join("");
+      document.querySelectorAll("[data-journal]").forEach(field => field.addEventListener("input", () => {
+        getDay(selectedDay).journal[field.dataset.journal] = field.value; saveState();
+      }));
+    }
+
+    function selectDay(day) { selectedDay = day; allOpen = false; renderCalendar(); renderDay(); window.scrollTo({top: document.querySelector(".day-panel").offsetTop - 16, behavior:"smooth"}); }
+    function setType(type) {
+      stopTimer();
+      state.typeOverrides[dayKey(selectedDay)] = type;
+      saveState();
+      allOpen = false;
+      renderCalendar(); renderDay(); showToast(`已切换为 ${type} 日计划`);
+    }
+    function toggleDone(index) {
+      const data = getItem(selectedDay, index);
+      data.done = !data.done; saveState();
+      const openIndexes = [...document.querySelectorAll(".practice-card.open")].map(el => Number(el.dataset.index));
+      renderCalendar(); renderDay();
+      openIndexes.forEach(i => document.querySelector(`.practice-card[data-index="${i}"]`)?.classList.add("open"));
+      if (data.done) showToast("完成一项，真棒！");
+    }
+    function toggleTimer(index) {
+      if (activeTimer === index) { stopTimer(); updateTimerButtons(); return; }
+      stopTimer(); activeTimer = index; updateTimerButtons();
+      timerTick = setInterval(() => {
+        getItem(selectedDay, index).seconds += 1;
+        if (getItem(selectedDay, index).seconds % 5 === 0) saveState();
+        updateItemTime(index);
+      }, 1000);
+    }
+    function stopTimer() { if (timerTick) clearInterval(timerTick); timerTick = null; activeTimer = null; saveState(); updateTimerButtons(); }
+    function updateTimerButtons() {
+      document.querySelectorAll("[data-timer]").forEach(btn => {
+        const index = Number(btn.closest(".practice-card").dataset.index);
+        const running = activeTimer === index;
+        btn.textContent = running ? "暂停计时" : "开始计时";
+        btn.classList.toggle("running", running);
+      });
+    }
+    function updateItemTime(index) {
+      const card = document.querySelector(`.practice-card[data-index="${index}"]`);
+      if (!card) return;
+      const text = formatClock(getItem(selectedDay, index).seconds);
+      card.querySelector("[data-clock]").textContent = text;
+      card.querySelector(".time-pill").textContent = text;
+    }
+    function showToast(message) {
+      const toast = document.getElementById("toast"); toast.textContent = message; toast.classList.add("show");
+      clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove("show"), 1800);
+    }
+
+    document.getElementById("typeA").addEventListener("click", () => setType("A"));
+    document.getElementById("typeB").addEventListener("click", () => setType("B"));
+    document.getElementById("openAll").addEventListener("click", () => {
+      allOpen = !allOpen;
+      document.querySelectorAll(".practice-card").forEach(card => {
+        card.classList.toggle("open", allOpen);
+        card.querySelector(".card-summary").setAttribute("aria-expanded", allOpen);
+      });
+      document.getElementById("openAll").textContent = allOpen ? "收起全部" : "展开全部";
+    });
+    const modal = document.getElementById("dataModal");
+    document.getElementById("dataBtn").addEventListener("click", () => modal.classList.add("show"));
+    document.getElementById("closeModal").addEventListener("click", () => modal.classList.remove("show"));
+    modal.addEventListener("click", e => { if (e.target === modal) modal.classList.remove("show"); });
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+      const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "Grace_2026年8月练习记录.json"; link.click(); URL.revokeObjectURL(link.href);
+      modal.classList.remove("show"); showToast("备份已导出");
+    });
+    document.getElementById("importFile").addEventListener("change", event => {
+      const file = event.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const imported = JSON.parse(reader.result);
+          if (!imported.days || !imported.typeOverrides) throw new Error("invalid");
+          state = imported; saveState(); modal.classList.remove("show"); renderCalendar(); renderDay(); showToast("记录已恢复");
+        } catch { showToast("这个备份文件无法读取"); }
+      };
+      reader.readAsText(file);
+    });
+    document.addEventListener("visibilitychange", () => { if (document.hidden) stopTimer(); });
+    window.addEventListener("beforeunload", saveState);
+
+    renderCalendar();
+    renderDay();
+  </script>
+</body>
+</html>

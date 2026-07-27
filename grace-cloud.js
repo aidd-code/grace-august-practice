@@ -31,7 +31,7 @@ document.body.insertAdjacentHTML("beforeend", `
   <section class="score-shell" id="scoreShell" aria-label="Grace 乐谱库">
     <div class="score-sidebar">
       <div class="library-head"><h2>Grace 乐谱库</h2><span class="spacer"></span><a class="library-close" href="#" id="closeScoreShell" aria-label="关闭">×</a></div>
-      <p class="library-intro">学生和老师都可以阅读和删除 PDF 或图片乐谱。上传或替换请在相应打卡条的“乐谱”处操作，上传后会自动关联。</p>
+      <p class="library-intro">所有人都可以阅读 PDF 或图片乐谱；登录后可以上传、替换和删除。上传或替换请在相应打卡条的“乐谱”处操作。</p>
       <input id="scoreSearch" type="search" placeholder="搜索作曲家或乐谱名称" style="box-sizing:border-box;width:100%;min-height:46px;padding:0 14px;border:1px solid rgba(80,62,96,.15);border-radius:13px">
       <div id="scoreList"><div class="cloud-empty">正在读取乐谱库…</div></div>
     </div>
@@ -114,13 +114,15 @@ function renderScores() {
     const url = publicUrl(row.file_path);
     const date = row.created_at ? new Date(row.created_at).toLocaleDateString("zh-CN") : "";
     const fileType = isImagePath(row.file_path) ? "图片" : "PDF";
-    return `<article class="cloud-card"><h3>${escapeText(row.title)}</h3><div class="cloud-meta">${fileType} · ${escapeText(row.composer || "未填写作曲家")}${row.page_count ? ` · ${row.page_count} 页` : ""}${date ? ` · ${date}` : ""}</div>${row.notes ? `<p style="line-height:1.55">${escapeText(row.notes)}</p>` : ""}<div class="cloud-actions"><button class="open-score" data-open-score="${escapeText(url)}" data-title="${escapeText(row.title)}" type="button">阅读乐谱</button><a href="${escapeText(url)}" target="_blank" rel="noopener">新窗口打开</a><button class="danger-btn" data-delete-score="${row.id}" data-path="${escapeText(row.file_path)}" data-title="${escapeText(row.title)}" type="button">删除</button></div></article>`;
+    const deleteButton = window.graceIsLoggedIn?.() ? `<button class="danger-btn" data-delete-score="${row.id}" data-path="${escapeText(row.file_path)}" data-title="${escapeText(row.title)}" type="button">删除</button>` : "";
+    return `<article class="cloud-card"><h3>${escapeText(row.title)}</h3><div class="cloud-meta">${fileType} · ${escapeText(row.composer || "未填写作曲家")}${row.page_count ? ` · ${row.page_count} 页` : ""}${date ? ` · ${date}` : ""}</div>${row.notes ? `<p style="line-height:1.55">${escapeText(row.notes)}</p>` : ""}<div class="cloud-actions"><button class="open-score" data-open-score="${escapeText(url)}" data-title="${escapeText(row.title)}" type="button">阅读乐谱</button><a href="${escapeText(url)}" target="_blank" rel="noopener">新窗口打开</a>${deleteButton}</div></article>`;
   }).join("") : `<div class="cloud-empty">${term ? "没有找到匹配的乐谱" : "乐谱库还是空的。请从某条打卡内容里上传第一份 PDF 或图片。"}</div>`;
   $("scoreList").querySelectorAll("[data-open-score]").forEach(button => button.addEventListener("click", () => window.openGraceScore(button.dataset.openScore, button.dataset.title)));
   $("scoreList").querySelectorAll("[data-delete-score]").forEach(button => button.addEventListener("click", () => deleteScore(button.dataset.deleteScore, button.dataset.path, button.dataset.title)));
 }
 
 async function deleteScore(id, path, title) {
+  if (!window.graceRequireLogin?.()) return;
   if (!confirm(`确定删除“${title}”吗？关联它的打卡条也会变回“尚未上传”。`)) return;
   const storageResult = await supabase.storage.from("scores").remove([path]);
   if (storageResult.error) return notify(`文件删除失败：${storageResult.error.message}`);
@@ -143,5 +145,6 @@ $("closeViewer").addEventListener("click", closeViewer);
 $("backToLibrary").addEventListener("click", closeViewer);
 $("scoreSearch").addEventListener("input", renderScores);
 window.addEventListener("grace:scores-changed", loadScores);
+window.addEventListener("grace:auth-changed", renderScores);
 
 await loadScores();

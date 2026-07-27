@@ -129,6 +129,14 @@
     .primary-btn { color: white; background: var(--purple); }
     .small-btn { min-height: 38px; padding: 0 13px; color: var(--purple-dark); background: #eee8f1; }
     .controls .spacer { flex: 1; }
+    .auth-btn{min-height:44px;padding:0 16px;border:0;border-radius:13px;color:white;background:var(--sage);font-weight:800;cursor:pointer}
+    .auth-btn.logged-in{color:var(--purple-dark);background:#e8eee9}
+    body.read-only .edit-only{display:none!important}
+    body.read-only textarea{color:#756d7d;background:#f7f4f2;cursor:not-allowed}
+    body.read-only .task-check{cursor:default}
+    body.read-only .task-check input{pointer-events:none}
+    .readonly-note{display:none;margin:0;padding:10px 16px;color:#756d7d;background:#f7f3f7;font-size:13px;text-align:center}
+    body.read-only .readonly-note{display:block}
 
     .practice-list { padding: 6px 30px 30px; }
     .practice-card { border-bottom: 1px solid var(--line); }
@@ -285,7 +293,7 @@
     }
   </style>
 </head>
-<body>
+<body class="read-only">
   <main class="app">
     <header class="hero">
       <div>
@@ -322,9 +330,11 @@
         </div>
         <span class="spacer"></span>
         <a class="primary-btn" id="scoreLibraryBtn" href="#scoreShell" style="display:grid;place-items:center;text-decoration:none">乐谱库</a>
+        <button class="auth-btn" id="authBtn" type="button">密码登录</button>
         <button class="ghost-btn" id="openAll" type="button">展开全部</button>
-        <button class="ghost-btn" id="dataBtn" type="button">备份数据</button>
+        <button class="ghost-btn edit-only" id="dataBtn" type="button">备份数据</button>
       </div>
+      <div class="readonly-note">当前是只读浏览模式。输入密码登录后，才可以填写、打卡、计时和管理乐谱。</div>
 
       <div class="practice-list" id="practiceList"></div>
 
@@ -332,7 +342,7 @@
         <h3>今日练习小记</h3>
         <p class="journal-intro">把“练了多久”变成“今天学会了什么”。内容会自动保存到云端，老师和学生打开同一网页即可共享。</p>
         <div class="journal-grid" id="journalGrid"></div>
-        <div class="save-note" id="cloudSaveStatus" data-state="local" role="status"><span id="cloudSaveText">保存到：Supabase 云端共享记录 · 正在连接</span><button class="save-retry" id="cloudSaveRetry" type="button">立即保存</button></div>
+        <div class="save-note" id="cloudSaveStatus" data-state="local" role="status"><span id="cloudSaveText">保存到：Supabase 云端共享记录 · 正在连接</span><button class="save-retry edit-only" id="cloudSaveRetry" type="button">立即保存</button></div>
       </section>
     </section>
 
@@ -353,6 +363,18 @@
         <label class="file-label">导入备份<input id="importFile" type="file" accept="application/json"></label>
         <button class="primary-btn" id="exportBtn" type="button">导出备份</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal" id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <div class="modal-box">
+      <h3 id="loginTitle">密码登录</h3>
+      <p>登录后可以填写练习记录、打卡、计时，以及上传、替换和删除乐谱。</p>
+      <form id="localLoginForm">
+        <label style="display:grid;gap:8px;color:var(--purple-dark);font-weight:800">访问密码<input id="localPassword" type="password" inputmode="numeric" autocomplete="current-password" required style="min-height:48px;padding:0 14px;border:1px solid var(--line);border-radius:13px;font-size:18px" placeholder="请输入密码"></label>
+        <div class="cloud-status" id="localLoginStatus"></div>
+        <div class="modal-actions"><button class="ghost-btn" id="cancelLogin" type="button">取消</button><button class="primary-btn" type="submit">登录</button></div>
+      </form>
     </div>
   </div>
 
@@ -545,6 +567,10 @@
       renderCalendar(); renderDay();
       return true;
     };
+    window.addEventListener("grace:auth-changed", () => {
+      renderCalendar();
+      renderDay();
+    });
 
     function renderItems() {
       const type = planType(selectedDay);
@@ -562,7 +588,7 @@
             ${item.scoreUrl ? `<div style="margin-bottom:14px"><button class="primary-btn" data-score-url="${escapeHtml(item.scoreUrl)}" data-score-title="${escapeHtml(item.title)}" type="button">打开关联乐谱</button></div>` : ""}
             <div class="practice-score-row">
               <span class="practice-score-label">乐谱</span>
-              ${item.scoreUrl ? `<button class="small-btn" data-score-card-open type="button">打开</button><button class="small-btn" data-score-card-replace type="button">替换</button><button class="small-btn danger-btn" data-score-card-delete type="button">删除</button>` : `<button class="small-btn" data-score-card-upload type="button">上传并关联</button>`}
+              ${item.scoreUrl ? `<button class="small-btn" data-score-card-open type="button">打开</button><button class="small-btn edit-only" data-score-card-replace type="button">替换</button><button class="small-btn danger-btn edit-only" data-score-card-delete type="button">删除</button>` : `<button class="small-btn edit-only" data-score-card-upload type="button">上传并关联</button>`}
               <span class="practice-score-meta">${item.scoreUrl ? `已关联${item.scorePages ? ` · ${item.scorePages} 页` : ""}` : "尚未上传"}</span>
             </div>
             <p class="translation">${escapeHtml(item.translation)}</p>
@@ -570,7 +596,7 @@
             <div class="task-checks">${checks}</div>
             ${item.question ? `<h4 class="focus-title">想一想，再写下来</h4><p style="line-height:1.65;margin:0 0 10px">${escapeHtml(item.question)}</p><textarea data-field="answer" placeholder="写下 Grace 自己的想法……">${escapeHtml(data.answer)}</textarea>` : ""}
             <h4 class="focus-title">练习计时与笔记</h4>
-            <div class="timer-row"><span class="timer-display" data-clock>${formatClock(data.seconds)}</span><button class="timer-btn" data-timer type="button">开始计时</button><button class="small-btn" data-add="300" type="button">+5 分钟</button><button class="small-btn" data-add="-300" type="button">−5 分钟</button></div>
+            <div class="timer-row"><span class="timer-display" data-clock>${formatClock(data.seconds)}</span><button class="timer-btn edit-only" data-timer type="button">开始计时</button><button class="small-btn edit-only" data-add="300" type="button">+5 分钟</button><button class="small-btn edit-only" data-add="-300" type="button">−5 分钟</button></div>
             <textarea data-field="note" placeholder="老师的提醒、今天发现的问题……" style="margin-top:12px">${escapeHtml(data.note)}</textarea>
           </div>
         </article>`;
@@ -582,14 +608,21 @@
         card.querySelector(".card-summary").addEventListener("click", event => {
           if (event.target.closest(".check")) {
             event.stopPropagation();
-            toggleDone(index);
+            if (window.graceRequireLogin?.()) toggleDone(index);
             return;
           }
           card.classList.toggle("open");
           card.querySelector(".card-summary").setAttribute("aria-expanded", card.classList.contains("open"));
         });
-        card.querySelector(".check").addEventListener("click", event => { event.stopPropagation(); toggleDone(index); });
+        card.querySelector(".check").addEventListener("click", event => {
+          event.stopPropagation();
+          if (window.graceRequireLogin?.()) toggleDone(index);
+        });
         card.querySelectorAll("[data-check]").forEach(input => input.addEventListener("change", () => {
+          if (!window.graceRequireLogin?.()) {
+            input.checked = !input.checked;
+            return;
+          }
           getItem(selectedDay, index).checks[input.dataset.check] = input.checked; saveState();
         }));
         card.querySelector("[data-score-url]")?.addEventListener("click", event => {
@@ -612,10 +645,17 @@
           document.dispatchEvent(new CustomEvent("grace:score-manage", {detail:{type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id}}));
         });
         card.querySelectorAll("[data-field]").forEach(field => field.addEventListener("input", () => {
+          if (!window.graceIsLoggedIn?.()) return;
           getItem(selectedDay, index)[field.dataset.field] = field.value; saveState();
         }));
-        card.querySelector("[data-timer]").addEventListener("click", () => toggleTimer(index));
+        card.querySelectorAll("[data-field]").forEach(field => {
+          field.readOnly = !window.graceIsLoggedIn?.();
+        });
+        card.querySelector("[data-timer]").addEventListener("click", () => {
+          if (window.graceRequireLogin?.()) toggleTimer(index);
+        });
         card.querySelectorAll("[data-add]").forEach(btn => btn.addEventListener("click", () => {
+          if (!window.graceRequireLogin?.()) return;
           const data = getItem(selectedDay, index);
           data.seconds = Math.max(0, data.seconds + Number(btn.dataset.add));
           saveState(); updateItemTime(index);
@@ -634,12 +674,17 @@
       const journal = getDay(selectedDay).journal;
       document.getElementById("journalGrid").innerHTML = prompts.map((p, i) => `<div class="prompt ${i === 0 ? "wide" : ""}"><label for="journal-${p[0]}">${p[1]}</label><textarea id="journal-${p[0]}" data-journal="${p[0]}" placeholder="${p[2]}">${escapeHtml(journal[p[0]] || "")}</textarea></div>`).join("");
       document.querySelectorAll("[data-journal]").forEach(field => field.addEventListener("input", () => {
+        if (!window.graceIsLoggedIn?.()) return;
         getDay(selectedDay).journal[field.dataset.journal] = field.value; saveState();
       }));
+      document.querySelectorAll("[data-journal]").forEach(field => {
+        field.readOnly = !window.graceIsLoggedIn?.();
+      });
     }
 
     function selectDay(day) { selectedDay = day; allOpen = false; renderCalendar(); renderDay(); window.scrollTo({top: document.querySelector(".day-panel").offsetTop - 16, behavior:"smooth"}); }
     function setType(type) {
+      if (!window.graceRequireLogin?.()) return;
       stopTimer();
       state.typeOverrides[dayKey(selectedDay)] = type;
       saveState();
@@ -695,15 +740,19 @@
       document.getElementById("openAll").textContent = allOpen ? "收起全部" : "展开全部";
     });
     const modal = document.getElementById("dataModal");
-    document.getElementById("dataBtn").addEventListener("click", () => modal.classList.add("show"));
+    document.getElementById("dataBtn").addEventListener("click", () => {
+      if (window.graceRequireLogin?.()) modal.classList.add("show");
+    });
     document.getElementById("closeModal").addEventListener("click", () => modal.classList.remove("show"));
     modal.addEventListener("click", e => { if (e.target === modal) modal.classList.remove("show"); });
     document.getElementById("exportBtn").addEventListener("click", () => {
+      if (!window.graceRequireLogin?.()) return;
       const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
       const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "Grace_2026年8月练习记录.json"; link.click(); URL.revokeObjectURL(link.href);
       modal.classList.remove("show"); showToast("备份已导出");
     });
     document.getElementById("importFile").addEventListener("change", event => {
+      if (!window.graceRequireLogin?.()) return;
       const file = event.target.files[0]; if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
@@ -722,8 +771,9 @@
     renderCalendar();
     renderDay();
   </script>
-  <script src="score-collab.js?v=20260727-3"></script>
-  <script src="practice-sync.js?v=20260727-1"></script>
-  <script type="module" src="grace-cloud.js?v=20260727-9"></script>
+  <script src="local-auth.js?v=20260727-1"></script>
+  <script src="score-collab.js?v=20260727-4"></script>
+  <script src="practice-sync.js?v=20260727-2"></script>
+  <script type="module" src="grace-cloud.js?v=20260727-10"></script>
 </body>
 </html>

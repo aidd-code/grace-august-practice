@@ -17,7 +17,7 @@
     text.textContent = message;
     const button = document.getElementById("cloudSaveRetry");
     if (button) {
-      button.disabled = state === "saving";
+      button.disabled = state === "saving" || !window.graceIsLoggedIn?.();
       button.textContent = state === "error" ? "重新保存" : "立即保存";
     }
   }
@@ -41,7 +41,7 @@
   }
 
   function queueSave(delay = 700) {
-    if (applyingCloud) return;
+    if (applyingCloud || !window.graceIsLoggedIn?.()) return;
     dirty = true;
     clearTimeout(saveTimer);
     setStatus("saving", "正在保存到云端…");
@@ -50,6 +50,10 @@
 
   async function saveNow() {
     clearTimeout(saveTimer);
+    if (!window.graceIsLoggedIn?.()) {
+      setStatus("saved", "只读模式 · 登录后可以保存修改");
+      return;
+    }
     if (saving) { queued = true; return; }
     const state = window.graceGetPracticeState?.();
     if (!state) return setStatus("error", "云端保存未启动");
@@ -80,7 +84,7 @@
       const row = rows?.[0];
       if (row?.state) {
         const localState = window.graceGetPracticeState?.();
-        if (!hasMeaningfulData(row.state) && hasMeaningfulData(localState)) {
+        if (window.graceIsLoggedIn?.() && !hasMeaningfulData(row.state) && hasMeaningfulData(localState)) {
           dirty = true;
           await saveNow();
           return;
@@ -90,8 +94,10 @@
         applyingCloud = false;
         const savedAt = new Date(row.updated_at).toLocaleTimeString("zh-CN", {hour:"2-digit", minute:"2-digit"});
         setStatus("saved", `已从云端同步 · ${savedAt}`);
-      } else {
+      } else if (window.graceIsLoggedIn?.()) {
         await saveNow();
+      } else {
+        setStatus("saved", "只读模式 · 登录后可以保存修改");
       }
     } catch (error) {
       applyingCloud = false;
@@ -102,6 +108,14 @@
 
   window.addEventListener("grace:practice-state-changed", () => queueSave());
   window.addEventListener("grace:practice-save-retry", saveNow);
+  window.addEventListener("grace:auth-changed", event => {
+    if (event.detail.loggedIn) {
+      clearTimeout(saveTimer);
+      dirty = false;
+      loadCloud();
+    }
+    else setStatus("saved", "只读模式 · 登录后可以保存修改");
+  });
   window.addEventListener("DOMContentLoaded", loadCloud);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && dirty) saveNow();

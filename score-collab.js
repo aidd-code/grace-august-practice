@@ -39,6 +39,7 @@
   }
 
   function openModal(detail) {
+    if (!window.graceRequireLogin?.()) return;
     context = detail;
     ensureModal();
     document.getElementById("collabScoreHeading").textContent = detail.scoreUrl ? "替换练习乐谱" : "上传练习乐谱";
@@ -63,6 +64,7 @@
 
   async function upload(event) {
     event.preventDefault();
+    if (!window.graceRequireLogin?.()) return;
     const file = document.getElementById("collabScoreFile").files[0];
     const status = document.getElementById("collabScoreStatus");
     if (!file || !allowedTypes.has(file.type)) return status.textContent = "请选择 PDF、JPG、PNG、WebP 或 GIF 文件";
@@ -114,6 +116,7 @@
   }
 
   async function remove(detail) {
+    if (!window.graceRequireLogin?.()) return;
     if (!confirm(`确定删除“${detail.title}”当前关联的乐谱吗？`)) return;
     try {
       await request(`/rest/v1/practice_score_links?plan_type=eq.${detail.type}&sort_order=eq.${detail.index+1}`, {method:"DELETE"});

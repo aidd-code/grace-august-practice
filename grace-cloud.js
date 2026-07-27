@@ -44,12 +44,14 @@ document.body.insertAdjacentHTML("beforeend", `
       </div>
       <div class="cloud-pane" data-cloud-pane="admin">
         <div id="loginArea">
-          <p style="line-height:1.65;color:#756d7d">管理员通过邮箱验证码登录后，可以上传 PDF、管理历史乐谱和修改练习内容。</p>
+          <p style="line-height:1.65;color:#756d7d">管理员使用邮箱和密码登录后，可以上传 PDF、管理历史乐谱和修改练习内容。</p>
           <form class="cloud-form" id="loginForm">
             <label>管理员邮箱<input id="adminEmail" type="email" value="aiddchen@gmail.com" required></label>
-            <button type="submit">发送登录邮件</button>
+            <label>管理员密码<input id="adminPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="至少 8 个字符"></label>
+            <button type="submit">登录管理后台</button>
             <div class="cloud-status" id="loginStatus"></div>
           </form>
+          <button class="small-btn" id="forgotPassword" type="button">忘记密码？发送重置邮件</button>
         </div>
         <div class="admin-only" id="adminArea">
           <p><span class="cloud-badge">管理员已登录</span> <span id="adminIdentity"></span></p>
@@ -272,10 +274,19 @@ document.querySelectorAll("[data-cloud-tab]").forEach(button => button.addEventL
 
 $("loginForm").addEventListener("submit", async event => {
   event.preventDefault();
-  $("loginStatus").textContent = "正在发送登录邮件…";
+  $("loginStatus").textContent = "正在登录…";
   const email = $("adminEmail").value.trim();
-  const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
-  $("loginStatus").textContent = error ? `发送失败：${error.message}` : "登录链接已发送，请在这台设备上打开邮件并点击链接。";
+  const password = $("adminPassword").value;
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  $("loginStatus").textContent = error ? `登录失败：${error.message}` : "登录成功，正在打开管理功能…";
+});
+
+$("forgotPassword").addEventListener("click", async () => {
+  const email = $("adminEmail").value.trim();
+  if (!email) return $("loginStatus").textContent = "请先填写管理员邮箱";
+  $("loginStatus").textContent = "正在发送密码重置邮件…";
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  $("loginStatus").textContent = error ? `发送失败：${error.message}` : "重置邮件已发送，请稍后再试，不要连续点击。";
 });
 
 $("logoutAdmin").addEventListener("click", async () => { await supabase.auth.signOut(); currentSession = null; setAdminState(false); });

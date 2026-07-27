@@ -141,7 +141,7 @@ function closeViewer() {
   $("scoreImage").removeAttribute("src");
 }
 
-$("closeViewer").addEventListener("click", closeViewer);
+$("closeViewer").addEventListener("click", closeShell);
 $("backToLibrary").addEventListener("click", closeViewer);
 $("scoreSearch").addEventListener("input", renderScores);
 window.addEventListener("grace:scores-changed", loadScores);

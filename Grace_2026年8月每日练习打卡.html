@@ -138,6 +138,7 @@
     body.read-only .task-check input{pointer-events:none}
     .readonly-note{display:none;margin:0;padding:10px 16px;color:#756d7d;background:#f7f3f7;font-size:13px;text-align:center}
     body.read-only .readonly-note{display:block}
+    .field-save-hint{margin:7px 2px 0;color:var(--muted);font-size:12px}
 
     .practice-list { padding: 6px 30px 30px; }
     .practice-card { border-bottom: 1px solid var(--line); }
@@ -603,6 +604,7 @@
             <h4 class="focus-title">练习计时与笔记</h4>
             <div class="timer-row"><span class="timer-display" data-clock>${formatClock(data.seconds)}</span><button class="timer-btn edit-only" data-timer type="button">开始计时</button><button class="small-btn edit-only" data-add="300" type="button">+5 分钟</button><button class="small-btn edit-only" data-add="-300" type="button">−5 分钟</button></div>
             <textarea data-field="note" placeholder="老师的提醒、今天发现的问题……" style="margin-top:12px">${escapeHtml(data.note)}</textarea>
+            <p class="field-save-hint">登录后自动保存：输入时先保存到本机，约 1 秒后同步到云端，无需点击保存。</p>
           </div>
         </article>`;
       }).join("");
@@ -779,6 +781,6 @@
   <script src="local-auth.js?v=20260727-1"></script>
   <script src="score-collab.js?v=20260727-4"></script>
   <script src="practice-sync.js?v=20260727-2"></script>
-  <script type="module" src="grace-cloud.js?v=20260727-10"></script>
+  <script type="module" src="grace-cloud.js?v=20260727-11"></script>
 </body>
 </html>

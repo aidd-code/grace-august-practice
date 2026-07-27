@@ -209,7 +209,12 @@
     .prompt.wide { grid-column: 1 / -1; }
     .prompt label { display: block; margin-bottom: 9px; color: var(--purple-dark); font-size: 14px; font-weight: 800; }
     .prompt textarea { min-height: 76px; }
-    .save-note { margin-top: 12px; color: var(--muted); font-size: 12px; text-align: right; }
+    .save-note { display:flex;justify-content:flex-end;gap:8px;align-items:center;margin-top:12px;color:var(--muted);font-size:12px;text-align:right }
+    .save-note[data-state="saving"] { color:var(--peach) }
+    .save-note[data-state="saved"] { color:var(--sage) }
+    .save-note[data-state="error"] { color:#9b4d4d }
+    .save-retry{min-height:30px;padding:0 10px;border:0;border-radius:9px;color:var(--purple-dark);background:#eee8f1;font-size:12px;font-weight:800;cursor:pointer}
+    .save-retry:disabled{opacity:.55;cursor:wait}.save-note[data-state="error"] .save-retry{color:#8a4e4e;background:#f5e8e8}
 
     footer { padding: 24px 4px 0; color: var(--muted); font-size: 13px; line-height: 1.7; text-align: center; }
     .quote { color: var(--purple-dark); font-family: Georgia, "Songti SC", serif; font-size: 17px; }
@@ -325,9 +330,9 @@
 
       <section class="journal">
         <h3>今日练习小记</h3>
-        <p class="journal-intro">把“练了多久”变成“今天学会了什么”。内容会自动保存在这台设备中。</p>
+        <p class="journal-intro">把“练了多久”变成“今天学会了什么”。内容会自动保存到云端，老师和学生打开同一网页即可共享。</p>
         <div class="journal-grid" id="journalGrid"></div>
-        <div class="save-note">自动保存 · 不需要点提交</div>
+        <div class="save-note" id="cloudSaveStatus" data-state="local" role="status"><span id="cloudSaveText">保存到：Supabase 云端共享记录 · 正在连接</span><button class="save-retry" id="cloudSaveRetry" type="button">立即保存</button></div>
       </section>
     </section>
 
@@ -342,7 +347,7 @@
   <div class="modal" id="dataModal" role="dialog" aria-modal="true" aria-labelledby="dataTitle">
     <div class="modal-box">
       <h3 id="dataTitle">练习记录备份</h3>
-      <p>记录只保存在当前浏览器里。建议每周导出一次备份；换 iPad 或清理浏览器数据后，可以再导入恢复。</p>
+      <p>记录会自动保存到云端，并在老师和学生的设备之间共享；本机同时保留一份副本。也可以导出文件作为额外备份。</p>
       <div class="modal-actions">
         <button class="ghost-btn" id="closeModal" type="button">取消</button>
         <label class="file-label">导入备份<input id="importFile" type="file" accept="application/json"></label>
@@ -460,7 +465,10 @@
       try { return { ...defaultState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
       catch { return defaultState(); }
     }
-    function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      window.dispatchEvent(new CustomEvent("grace:practice-state-changed", {detail:{state}}));
+    }
     function dayKey(day) { return `2026-08-${String(day).padStart(2, "0")}`; }
     function planType(day) { return state.typeOverrides[dayKey(day)] || (day % 2 ? "A" : "B"); }
     function getDay(day) {
@@ -528,6 +536,15 @@
     window.gracePlans = plans;
     window.graceRender = () => { renderCalendar(); renderDay(); };
     window.graceSelectedDay = () => selectedDay;
+    window.graceGetPracticeState = () => JSON.parse(JSON.stringify(state));
+    window.graceApplyPracticeState = cloudState => {
+      if (!cloudState?.days || !cloudState?.typeOverrides) return false;
+      stopTimer();
+      state = cloudState;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderCalendar(); renderDay();
+      return true;
+    };
 
     function renderItems() {
       const type = planType(selectedDay);
@@ -700,11 +717,13 @@
     });
     document.addEventListener("visibilitychange", () => { if (document.hidden) stopTimer(); });
     window.addEventListener("beforeunload", saveState);
+    document.getElementById("cloudSaveRetry").addEventListener("click", () => window.dispatchEvent(new Event("grace:practice-save-retry")));
 
     renderCalendar();
     renderDay();
   </script>
   <script src="score-collab.js?v=20260727-3"></script>
+  <script src="practice-sync.js?v=20260727-1"></script>
   <script type="module" src="grace-cloud.js?v=20260727-9"></script>
 </body>
 </html>

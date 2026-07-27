@@ -525,6 +525,10 @@
       renderJournal();
     }
 
+    window.gracePlans = plans;
+    window.graceRender = () => { renderCalendar(); renderDay(); };
+    window.graceSelectedDay = () => selectedDay;
+
     function renderItems() {
       const type = planType(selectedDay);
       const list = document.getElementById("practiceList");
@@ -557,6 +561,7 @@
 
       list.querySelectorAll(".practice-card").forEach(card => {
         const index = Number(card.dataset.index);
+        const item = plans[type][index];
         card.querySelector(".card-summary").addEventListener("click", event => {
           if (event.target.closest(".check")) {
             event.stopPropagation();
@@ -698,10 +703,8 @@
 
     renderCalendar();
     renderDay();
-    window.gracePlans = plans;
-    window.graceRender = () => { renderCalendar(); renderDay(); };
-    window.graceSelectedDay = () => selectedDay;
   </script>
-  <script type="module" src="grace-cloud.js?v=20260727-7"></script>
+  <script src="score-collab.js?v=20260727-2"></script>
+  <script type="module" src="grace-cloud.js?v=20260727-8"></script>
 </body>
 </html>

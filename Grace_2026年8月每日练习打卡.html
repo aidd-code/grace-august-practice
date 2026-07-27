@@ -539,6 +539,11 @@
           </button>
           <div class="card-body">
             ${item.scoreUrl ? `<div style="margin-bottom:14px"><button class="primary-btn" data-score-url="${escapeHtml(item.scoreUrl)}" data-score-title="${escapeHtml(item.title)}" type="button">打开关联乐谱</button></div>` : ""}
+            <div class="practice-score-row">
+              <span class="practice-score-label">乐谱</span>
+              ${item.scoreUrl ? `<button class="small-btn" data-score-card-open type="button">打开</button><button class="small-btn" data-score-card-replace type="button">替换</button><button class="small-btn danger-btn" data-score-card-delete type="button">删除</button>` : `<button class="small-btn" data-score-card-upload type="button">上传并关联</button>`}
+              <span class="practice-score-meta">${item.scoreUrl ? `已关联${item.scorePages ? ` · ${item.scorePages} 页` : ""}` : "尚未上传"}</span>
+            </div>
             <p class="translation">${escapeHtml(item.translation)}</p>
             <h4 class="focus-title">今天要注意</h4>
             <div class="task-checks">${checks}</div>
@@ -567,6 +572,22 @@
         }));
         card.querySelector("[data-score-url]")?.addEventListener("click", event => {
           window.openGraceScore?.(event.currentTarget.dataset.scoreUrl, event.currentTarget.dataset.scoreTitle);
+        });
+        card.querySelector("[data-score-card-open]")?.addEventListener("click", event => {
+          event.stopPropagation();
+          window.openGraceScore?.(item.scoreUrl, item.title);
+        });
+        card.querySelector("[data-score-card-replace]")?.addEventListener("click", event => {
+          event.stopPropagation();
+          window.openGracePracticeScoreManager?.({type, index, title:item.title, practiceId:item.id, scoreId:item.scoreId, scoreUrl:item.scoreUrl, scorePath:item.scorePath});
+        });
+        card.querySelector("[data-score-card-delete]")?.addEventListener("click", event => {
+          event.stopPropagation();
+          window.deleteGracePracticeScore?.({type, index, title:item.title, practiceId:item.id, scoreId:item.scoreId, scorePath:item.scorePath});
+        });
+        card.querySelector("[data-score-card-upload]")?.addEventListener("click", event => {
+          event.stopPropagation();
+          window.openGracePracticeScoreManager?.({type, index, title:item.title, practiceId:item.id});
         });
         card.querySelectorAll("[data-field]").forEach(field => field.addEventListener("input", () => {
           getItem(selectedDay, index)[field.dataset.field] = field.value; saveState();

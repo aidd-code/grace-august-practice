@@ -9,6 +9,7 @@ let practiceRows = [];
 let editingPracticeId = null;
 let currentSession = null;
 let isAdmin = false;
+let practiceScoreContext = null;
 
 const style = document.createElement("style");
 style.textContent = `
@@ -25,7 +26,7 @@ style.textContent = `
   .library-head button{width:42px;height:42px;border:0;border-radius:50%;font-size:24px;background:#f0eaf1;color:#57436f;cursor:pointer}
   .cloud-tabs{display:flex;gap:8px;margin:0 0 18px;padding:4px;border-radius:14px;background:#f0eaf1}.cloud-tabs button{flex:1;min-height:42px;border:0;border-radius:11px;background:transparent;color:#756d7d;font-weight:800;cursor:pointer}.cloud-tabs button.active{color:white;background:#725c8f}
   .cloud-pane{display:none}.cloud-pane.active{display:block}.cloud-card{margin:10px 0;padding:15px;border:1px solid rgba(80,62,96,.12);border-radius:16px;background:#fff}.cloud-card h3{margin:0 0 5px;font-size:16px}.cloud-meta{color:#756d7d;font-size:12px;line-height:1.5}.cloud-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.cloud-actions button,.cloud-actions a{min-height:38px;padding:0 12px;border:0;border-radius:11px;color:#57436f;background:#eee8f1;font-weight:750;text-decoration:none;cursor:pointer}.cloud-actions .open-score{color:white;background:#725c8f}
-  .cloud-empty{padding:30px 12px;color:#756d7d;text-align:center}.cloud-form{display:grid;gap:12px;margin:14px 0;padding:16px;border-radius:16px;background:#f7f3f7}.cloud-form label{display:grid;gap:6px;color:#57436f;font-size:13px;font-weight:800}.cloud-form input,.cloud-form select,.cloud-form textarea{width:100%;min-height:44px;padding:10px 12px;border:1px solid rgba(80,62,96,.15);border-radius:11px;background:white}.cloud-form textarea{min-height:86px}.cloud-form button{min-height:44px;border:0;border-radius:12px;color:white;background:#725c8f;font-weight:800;cursor:pointer}.cloud-form .secondary{color:#57436f;background:#e9e2ec}.cloud-status{min-height:22px;color:#756d7d;font-size:13px}.admin-only{display:none}.admin-only.show{display:block}.cloud-inline{display:grid;grid-template-columns:1fr 1fr;gap:10px}.cloud-badge{display:inline-block;padding:4px 8px;border-radius:8px;background:#edf3ee;color:#567361;font-size:11px;font-weight:800}
+  .cloud-empty{padding:30px 12px;color:#756d7d;text-align:center}.cloud-form{display:grid;gap:12px;margin:14px 0;padding:16px;border-radius:16px;background:#f7f3f7}.cloud-form label{display:grid;gap:6px;color:#57436f;font-size:13px;font-weight:800}.cloud-form input,.cloud-form select,.cloud-form textarea{width:100%;min-height:44px;padding:10px 12px;border:1px solid rgba(80,62,96,.15);border-radius:11px;background:white}.cloud-form textarea{min-height:86px}.cloud-form button{min-height:44px;border:0;border-radius:12px;color:white;background:#725c8f;font-weight:800;cursor:pointer}.cloud-form .secondary{color:#57436f;background:#e9e2ec}.cloud-status{min-height:22px;color:#756d7d;font-size:13px}.admin-only{display:none}.admin-only.show{display:block}.cloud-inline{display:grid;grid-template-columns:1fr 1fr;gap:10px}.cloud-badge{display:inline-block;padding:4px 8px;border-radius:8px;background:#edf3ee;color:#567361;font-size:11px;font-weight:800}.practice-score-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 18px;padding:10px 12px;border-radius:12px;background:#f3edf4}.practice-score-label{color:#57436f;font-size:13px;font-weight:850}.practice-score-meta{color:#756d7d;font-size:12px}.danger-btn{color:#8a4e4e!important;background:#f5e8e8!important}
   @media(max-width:760px){.score-shell.show,.score-shell:target{display:block}.score-sidebar{height:100%;border:0}.score-viewer{position:fixed;z-index:2;inset:0;display:none}.score-viewer.show{display:flex}.cloud-inline{grid-template-columns:1fr}}
 `;
 document.head.appendChild(style);
@@ -89,6 +90,21 @@ document.body.insertAdjacentHTML("beforeend", `
       <iframe id="scoreFrame" title="PDF 乐谱阅读器"></iframe>
     </div>
   </section>
+  <div class="modal" id="practiceScoreModal" role="dialog" aria-modal="true" aria-labelledby="practiceScoreModalTitle">
+    <div class="modal-box">
+      <h3 id="practiceScoreModalTitle">上传练习乐谱</h3>
+      <p id="practiceScoreModalHint" style="color:var(--muted);line-height:1.6">这份 PDF 会自动关联到当前练习。</p>
+      <form class="cloud-form" id="practiceScoreForm">
+        <label>乐谱名称<input id="practiceScoreTitle" required></label>
+        <label>作曲家<input id="practiceScoreComposer" placeholder="可选"></label>
+        <label>PDF 文件（最大 25 MB）<input id="practiceScoreFile" type="file" accept="application/pdf" required></label>
+        <label>备注<textarea id="practiceScoreNotes" placeholder="版本、乐章或老师的说明"></textarea></label>
+        <button type="submit">上传并关联</button>
+        <button class="secondary" id="cancelPracticeScore" type="button">取消</button>
+        <div class="cloud-status" id="practiceScoreStatus"></div>
+      </form>
+    </div>
+  </div>
 `);
 
 const $ = id => document.getElementById(id);
@@ -105,6 +121,29 @@ function openShell(tab = "library") {
   switchTab(tab);
   loadScores();
 }
+
+function openPracticeScoreManager(context) {
+  practiceScoreContext = context;
+  $("practiceScoreTitle").value = context.title || "";
+  $("practiceScoreComposer").value = "";
+  $("practiceScoreNotes").value = "";
+  $("practiceScoreFile").value = "";
+  $("practiceScoreStatus").textContent = "";
+  $("practiceScoreModalTitle").textContent = context.scoreUrl ? "替换练习乐谱" : "上传练习乐谱";
+  $("practiceScoreModalHint").textContent = `这份 PDF 会自动关联到“${context.title}”，学生和老师都可以使用。`;
+  $("practiceScoreModal").classList.add("show");
+}
+
+window.openGracePracticeScoreManager = openPracticeScoreManager;
+
+window.deleteGracePracticeScore = async context => {
+  if (!confirm(`确定删除“${context.title}”当前关联的乐谱吗？`)) return;
+  if (context.scorePath) await supabase.storage.from("scores").remove([context.scorePath]);
+  if (context.scoreId) await supabase.from("scores").delete().eq("id", context.scoreId);
+  if (context.practiceId) await supabase.from("practice_items").update({score_id:null}).eq("id", context.practiceId);
+  await loadScores(); await loadRemotePractice();
+  notify("这项练习的乐谱已删除");
+};
 
 window.openGraceLibrary = () => openShell("library");
 
@@ -203,7 +242,7 @@ async function loadRemotePractice() {
     if (rows.length) window.gracePlans[type] = rows.map(row => ({
       id: row.id, title: row.title, minutes: row.minutes, target: row.target,
       translation: row.translation, tasks: row.tasks || [], question: row.question,
-      scoreId: row.score_id, scoreUrl: row.scores?.file_path ? publicUrl(row.scores.file_path) : null
+      scoreId: row.score_id, scorePath: row.scores?.file_path || null, scorePages: row.scores?.page_count || null, scoreUrl: row.scores?.file_path ? publicUrl(row.scores.file_path) : null
     }));
   }
   window.graceRender?.();
@@ -271,6 +310,29 @@ $("closeViewer").addEventListener("click", () => $("scoreViewer").classList.remo
 $("backToLibrary").addEventListener("click", () => $("scoreViewer").classList.remove("show"));
 $("scoreSearch").addEventListener("input", renderScores);
 document.querySelectorAll("[data-cloud-tab]").forEach(button => button.addEventListener("click", () => switchTab(button.dataset.cloudTab)));
+$("cancelPracticeScore").addEventListener("click", () => $("practiceScoreModal").classList.remove("show"));
+
+$("practiceScoreForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const file = $("practiceScoreFile").files[0];
+  if (!file || file.type !== "application/pdf") return $("practiceScoreStatus").textContent = "请选择 PDF 文件";
+  if (file.size > 25 * 1024 * 1024) return $("practiceScoreStatus").textContent = "PDF 不能超过 25 MB";
+  if (!practiceScoreContext) return;
+  $("practiceScoreStatus").textContent = "正在读取页数并上传…";
+  const path = safeFileName(file.name);
+  const pages = await countPdfPages(file);
+  const upload = await supabase.storage.from("scores").upload(path, file, { contentType:"application/pdf" });
+  if (upload.error) return $("practiceScoreStatus").textContent = `上传失败：${upload.error.message}`;
+  const insert = await supabase.from("scores").insert({title:$('practiceScoreTitle').value.trim(),composer:$('practiceScoreComposer').value.trim(),notes:$('practiceScoreNotes').value.trim(),file_path:path,page_count:pages,is_public:true});
+  if (insert.error) { await supabase.storage.from("scores").remove([path]); return $("practiceScoreStatus").textContent = `保存失败：${insert.error.message}`; }
+  const score = (await supabase.from("scores").select("id").eq("file_path",path).maybeSingle()).data;
+  if (practiceScoreContext.practiceId && score?.id) await supabase.from("practice_items").update({score_id:score.id}).eq("id",practiceScoreContext.practiceId);
+  if (practiceScoreContext.scorePath) await supabase.storage.from("scores").remove([practiceScoreContext.scorePath]);
+  if (practiceScoreContext.scoreId) await supabase.from("scores").delete().eq("id",practiceScoreContext.scoreId);
+  $("practiceScoreModal").classList.remove("show");
+  await loadScores(); await loadRemotePractice();
+  notify("乐谱已上传并自动关联到当前练习");
+});
 
 $("loginForm").addEventListener("submit", async event => {
   event.preventDefault();

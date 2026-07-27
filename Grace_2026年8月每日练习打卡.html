@@ -583,6 +583,8 @@
       const list = document.getElementById("practiceList");
       list.innerHTML = plans[type].map((item, i) => {
         const data = getItem(selectedDay, i);
+        const scoreCount = item.scoreFiles?.length || (item.scoreUrl ? 1 : 0);
+        const hasScore = scoreCount > 0;
         const checks = item.tasks.map((task, j) => `<label class="task-check"><input type="checkbox" data-check="${j}" ${data.checks[j] ? "checked" : ""}><span>${escapeHtml(task)}</span></label>`).join("");
         return `<article class="practice-card ${data.done ? "done" : ""} ${allOpen ? "open" : ""}" data-index="${i}">
           <button class="card-summary" type="button" aria-expanded="${allOpen}">
@@ -591,11 +593,11 @@
             <span class="time-pill">${data.seconds ? formatClock(data.seconds) : targetText(item)}</span><span class="chevron">⌄</span>
           </button>
           <div class="card-body">
-            ${item.scoreUrl ? `<div style="margin-bottom:14px"><button class="primary-btn" data-score-url="${escapeHtml(item.scoreUrl)}" data-score-title="${escapeHtml(item.title)}" type="button">打开关联乐谱</button></div>` : ""}
+            ${hasScore ? `<div style="margin-bottom:14px"><button class="primary-btn" data-score-card-open type="button">打开关联乐谱</button></div>` : ""}
             <div class="practice-score-row">
               <span class="practice-score-label">乐谱</span>
-              ${item.scoreUrl ? `<button class="small-btn" data-score-card-open type="button">打开</button><button class="small-btn edit-only" data-score-card-replace type="button">替换</button><button class="small-btn danger-btn edit-only" data-score-card-delete type="button">删除</button>` : `<button class="small-btn edit-only" data-score-card-upload type="button">上传并关联</button>`}
-              <span class="practice-score-meta">${item.scoreUrl ? `已关联${item.scorePages ? ` · ${item.scorePages} 页` : ""}` : "尚未上传"}</span>
+              ${hasScore ? `<button class="small-btn" data-score-card-open type="button">打开</button><button class="small-btn edit-only" data-score-card-add type="button">继续添加</button><button class="small-btn edit-only" data-score-card-replace type="button">整组替换</button><button class="small-btn danger-btn edit-only" data-score-card-delete type="button">全部删除</button>` : `<button class="small-btn edit-only" data-score-card-upload type="button">上传并关联</button>`}
+              <span class="practice-score-meta">${hasScore ? `已关联 · ${scoreCount} 个文件${item.scorePages ? ` · 共 ${item.scorePages} 页` : ""}` : "尚未上传 · 可一次选择多个文件"}</span>
             </div>
             <p class="translation">${escapeHtml(item.translation)}</p>
             <h4 class="focus-title">今天要注意</h4>
@@ -632,24 +634,25 @@
           }
           getItem(selectedDay, index).checks[input.dataset.check] = input.checked; saveState();
         }));
-        card.querySelector("[data-score-url]")?.addEventListener("click", event => {
-          window.openGraceScore?.(event.currentTarget.dataset.scoreUrl, event.currentTarget.dataset.scoreTitle);
-        });
-        card.querySelector("[data-score-card-open]")?.addEventListener("click", event => {
+        card.querySelectorAll("[data-score-card-open]").forEach(button => button.addEventListener("click", event => {
           event.stopPropagation();
-          window.openGraceScore?.(item.scoreUrl, item.title);
+          window.openGraceScores?.(item.scoreFiles || [{url:item.scoreUrl, name:item.title}], item.title);
+        }));
+        card.querySelector("[data-score-card-add]")?.addEventListener("click", event => {
+          event.stopPropagation();
+          document.dispatchEvent(new CustomEvent("grace:score-manage", {detail:{mode:"append", type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id, scoreId:item.scoreId, scorePath:item.scorePath, scoreFiles:item.scoreFiles}}));
         });
         card.querySelector("[data-score-card-replace]")?.addEventListener("click", event => {
           event.stopPropagation();
-          document.dispatchEvent(new CustomEvent("grace:score-manage", {detail:{type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id, scoreId:item.scoreId, scoreUrl:item.scoreUrl, scorePath:item.scorePath}}));
+          document.dispatchEvent(new CustomEvent("grace:score-manage", {detail:{mode:"replace", type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id, scoreId:item.scoreId, scorePath:item.scorePath, scoreFiles:item.scoreFiles}}));
         });
         card.querySelector("[data-score-card-delete]")?.addEventListener("click", event => {
           event.stopPropagation();
-          document.dispatchEvent(new CustomEvent("grace:score-delete", {detail:{type, index, title:item.title, practiceId:item.id, scoreId:item.scoreId, scorePath:item.scorePath}}));
+          document.dispatchEvent(new CustomEvent("grace:score-delete", {detail:{type, index, title:item.title, practiceId:item.id, scoreId:item.scoreId, scorePath:item.scorePath, scoreFiles:item.scoreFiles}}));
         });
         card.querySelector("[data-score-card-upload]")?.addEventListener("click", event => {
           event.stopPropagation();
-          document.dispatchEvent(new CustomEvent("grace:score-manage", {detail:{type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id}}));
+          document.dispatchEvent(new CustomEvent("grace:score-manage", {detail:{mode:"replace", type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id}}));
         });
         card.querySelectorAll("[data-field]").forEach(field => field.addEventListener("input", () => {
           if (!window.graceIsLoggedIn?.()) return;
@@ -779,8 +782,8 @@
     renderDay();
   </script>
   <script src="local-auth.js?v=20260727-1"></script>
-  <script src="score-collab.js?v=20260727-4"></script>
+  <script src="score-collab.js?v=20260727-5"></script>
   <script src="practice-sync.js?v=20260727-2"></script>
-  <script type="module" src="grace-cloud.js?v=20260727-11"></script>
+  <script type="module" src="grace-cloud.js?v=20260727-12"></script>
 </body>
 </html>

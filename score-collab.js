@@ -12,7 +12,7 @@
 
   function fileName(file) {
     const baseName = file.name.replace(/\.[^.]+$/i, "").normalize("NFKD").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "score";
-    return `${Date.now()}-${baseName}.${extensions[file.type]}`;
+    return `${Date.now()}-${Math.random().toString(36).slice(2,8)}-${baseName}.${extensions[file.type]}`;
   }
 
   function publicUrl(path) {
@@ -26,9 +26,9 @@
       <form class="cloud-form" id="collabScoreForm">
         <label>乐谱名称<input id="collabScoreTitle" required></label>
         <label>作曲家<input id="collabScoreComposer" placeholder="可选"></label>
-        <label>选择 PDF 或图片（最大 25 MB）<input id="collabScoreFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/gif" required></label>
+        <label>选择 PDF 或图片（可多选，每个最大 25 MB）<input id="collabScoreFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/gif" multiple required></label>
         <label>备注<textarea id="collabScoreNotes" placeholder="版本、乐章或说明"></textarea></label>
-        <button type="submit">上传并自动关联</button><button class="secondary" id="collabScoreCancel" type="button">取消</button>
+        <button id="collabScoreSubmit" type="submit">上传并自动关联</button><button class="secondary" id="collabScoreCancel" type="button">取消</button>
         <div class="cloud-status" id="collabScoreStatus"></div>
       </form></div></div>`);
     document.getElementById("collabScoreCancel").addEventListener("click", closeModal);
@@ -42,8 +42,10 @@
     if (!window.graceRequireLogin?.()) return;
     context = detail;
     ensureModal();
-    document.getElementById("collabScoreHeading").textContent = detail.scoreUrl ? "替换练习乐谱" : "上传练习乐谱";
-    document.getElementById("collabScoreHint").textContent = `上传后自动关联到“${detail.title}”，无需再去乐谱库查找。`;
+    const appending = detail.mode === "append";
+    document.getElementById("collabScoreHeading").textContent = appending ? "继续添加乐谱文件" : (detail.scoreId ? "替换整组乐谱" : "上传练习乐谱");
+    document.getElementById("collabScoreHint").textContent = `可以一次选择多张图片或多个 PDF。上传后自动关联到“${detail.title}”，打开时可左右切换浏览。`;
+    document.getElementById("collabScoreSubmit").textContent = appending ? "添加到现有乐谱" : "上传并自动关联";
     document.getElementById("collabScoreTitle").value = detail.title || "";
     document.getElementById("collabScoreComposer").value = "";
     document.getElementById("collabScoreNotes").value = "";
@@ -65,31 +67,51 @@
   async function upload(event) {
     event.preventDefault();
     if (!window.graceRequireLogin?.()) return;
-    const file = document.getElementById("collabScoreFile").files[0];
+    const files = [...document.getElementById("collabScoreFile").files];
     const status = document.getElementById("collabScoreStatus");
-    if (!file || !allowedTypes.has(file.type)) return status.textContent = "请选择 PDF、JPG、PNG、WebP 或 GIF 文件";
-    if (file.size > 25 * 1024 * 1024) return status.textContent = "文件不能超过 25 MB";
-    status.textContent = "正在上传并关联…";
-    const path = fileName(file);
+    const submitButton = document.getElementById("collabScoreSubmit");
+    if (!files.length || files.some(file => !allowedTypes.has(file.type))) return status.textContent = "请选择 PDF、JPG、PNG、WebP 或 GIF 文件";
+    if (files.some(file => file.size > 25 * 1024 * 1024)) return status.textContent = "每个文件不能超过 25 MB";
+    submitButton.disabled = true;
+    status.textContent = `正在上传 0 / ${files.length}…`;
+    const uploaded = [];
     let scoreId = null;
     try {
-      await request(`/storage/v1/object/scores/${encodeURIComponent(path)}`, { method:"POST", headers:{"Content-Type":file.type,"x-upsert":"false"}, body:file });
-      const pages = file.type === "application/pdf" ? await countPdfPages(file) : null;
-      const scores = await request("/rest/v1/scores?select=id", { method:"POST", headers:{"Content-Type":"application/json",Prefer:"return=representation"}, body:JSON.stringify({title:document.getElementById("collabScoreTitle").value.trim(),composer:document.getElementById("collabScoreComposer").value.trim(),notes:document.getElementById("collabScoreNotes").value.trim(),file_path:path,page_count:pages,is_public:true}) });
+      for (let index = 0; index < files.length; index++) {
+        const file = files[index];
+        const path = fileName(file);
+        await request(`/storage/v1/object/scores/${encodeURIComponent(path)}`, { method:"POST", headers:{"Content-Type":file.type,"x-upsert":"false"}, body:file });
+        const pages = file.type === "application/pdf" ? await countPdfPages(file) : null;
+        uploaded.push({path, name:file.name, type:file.type, pages});
+        status.textContent = `正在上传 ${index + 1} / ${files.length}…`;
+      }
+      const oldFiles = context.mode === "append" ? normalizeFiles(context) : [];
+      const allFiles = [...oldFiles, ...uploaded].map(file => ({path:file.path, name:file.name, type:file.type, pages:file.pages || null}));
+      let oldScore = null;
+      if (context.mode === "append" && context.scoreId) {
+        oldScore = (await request(`/rest/v1/scores?id=eq.${encodeURIComponent(context.scoreId)}&select=composer,notes`))?.[0] || null;
+      }
+      const oldNotes = oldScore ? parseScoreNotes(oldScore.notes) : "";
+      const notes = document.getElementById("collabScoreNotes").value.trim() || oldNotes;
+      const composer = document.getElementById("collabScoreComposer").value.trim() || oldScore?.composer || "";
+      const metadata = JSON.stringify({graceFiles:allFiles, notes});
+      const scores = await request("/rest/v1/scores?select=id", { method:"POST", headers:{"Content-Type":"application/json",Prefer:"return=representation"}, body:JSON.stringify({title:document.getElementById("collabScoreTitle").value.trim(),composer,notes:metadata,file_path:allFiles[0].path,page_count:allFiles.reduce((sum,file) => sum + (file.pages || (String(file.type).startsWith("image/") || /\.(?:jpe?g|png|webp|gif)$/i.test(file.path) ? 1 : 0)), 0) || null,is_public:true}) });
       const score = scores?.[0];
       if (!score) throw new Error("没有生成乐谱记录");
       scoreId = score.id;
       await request("/rest/v1/practice_score_links?on_conflict=plan_type,sort_order", { method:"POST", headers:{"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"}, body:JSON.stringify({plan_type:context.type,sort_order:context.index+1,score_id:score.id,updated_at:new Date().toISOString()}) });
-      if (context.scorePath) await removeOld(context);
+      if (context.scoreId) await removeOld(context, context.mode === "append");
       status.textContent = "上传成功，正在刷新当前练习…";
       closeModal();
       await loadLinks();
       window.dispatchEvent(new Event("grace:scores-changed"));
-      notify("乐谱已上传，并自动关联到这项练习");
+      notify(`${files.length} 个乐谱文件已上传，并自动关联到这项练习`);
     } catch (error) {
       if (scoreId) await request(`/rest/v1/scores?id=eq.${encodeURIComponent(scoreId)}`, {method:"DELETE"}).catch(()=>{});
-      await deleteStoredFile(path).catch(()=>{});
+      await Promise.all(uploaded.map(file => deleteStoredFile(file.path).catch(()=>{})));
       status.textContent = `上传失败：${readableError(error)}`;
+    } finally {
+      submitButton.disabled = false;
     }
   }
 
@@ -110,14 +132,33 @@
     });
   }
 
-  async function removeOld(detail) {
-    if (detail.scorePath) await deleteStoredFile(detail.scorePath).catch(()=>{});
+  function parseFiles(notes) {
+    try {
+      const parsed = JSON.parse(notes || "{}");
+      return Array.isArray(parsed.graceFiles) ? parsed.graceFiles : [];
+    } catch { return []; }
+  }
+
+  function parseScoreNotes(notes) {
+    try {
+      const parsed = JSON.parse(notes || "{}");
+      return Array.isArray(parsed.graceFiles) ? (parsed.notes || "") : (notes || "");
+    } catch { return notes || ""; }
+  }
+
+  function normalizeFiles(detail) {
+    if (detail.scoreFiles?.length) return detail.scoreFiles.map(file => ({path:file.path, name:file.name, type:file.type, pages:file.pages}));
+    return detail.scorePath ? [{path:detail.scorePath, name:detail.title, type:"", pages:detail.scorePages}] : [];
+  }
+
+  async function removeOld(detail, keepFiles = false) {
+    if (!keepFiles) await Promise.all(normalizeFiles(detail).map(file => deleteStoredFile(file.path).catch(()=>{})));
     if (detail.scoreId) await request(`/rest/v1/scores?id=eq.${encodeURIComponent(detail.scoreId)}`, {method:"DELETE"}).catch(()=>{});
   }
 
   async function remove(detail) {
     if (!window.graceRequireLogin?.()) return;
-    if (!confirm(`确定删除“${detail.title}”当前关联的乐谱吗？`)) return;
+    if (!confirm(`确定删除“${detail.title}”关联的全部乐谱文件吗？`)) return;
     try {
       await request(`/rest/v1/practice_score_links?plan_type=eq.${detail.type}&sort_order=eq.${detail.index+1}`, {method:"DELETE"});
       await removeOld(detail);
@@ -141,12 +182,17 @@
 
   async function loadLinks() {
     try {
-      const links = await request("/rest/v1/practice_score_links?select=plan_type,sort_order,score_id,scores(title,file_path,page_count)");
+      const links = await request("/rest/v1/practice_score_links?select=plan_type,sort_order,score_id,scores(title,file_path,page_count,notes)");
       if (!window.gracePlans) return;
       for (const type of ["A","B"]) window.gracePlans[type].forEach((item,index) => {
         const link = links.find(row => row.plan_type === type && row.sort_order === index + 1);
-        delete item.scoreId; delete item.scorePath; delete item.scoreUrl; delete item.scorePages;
-        if (link?.scores) { item.scoreId=link.score_id; item.scorePath=link.scores.file_path; item.scoreUrl=publicUrl(link.scores.file_path); item.scorePages=link.scores.page_count; }
+        delete item.scoreId; delete item.scorePath; delete item.scoreUrl; delete item.scorePages; delete item.scoreFiles;
+        if (link?.scores) {
+          const storedFiles = parseFiles(link.scores.notes);
+          const files = storedFiles.length ? storedFiles : [{path:link.scores.file_path, name:link.scores.title, type:"", pages:link.scores.page_count}];
+          item.scoreId=link.score_id; item.scorePath=link.scores.file_path; item.scoreUrl=publicUrl(link.scores.file_path); item.scorePages=link.scores.page_count;
+          item.scoreFiles=files.map(file => ({...file, url:publicUrl(file.path)}));
+        }
       });
       window.graceRender?.();
     } catch (error) { console.warn("Score links unavailable", error); }

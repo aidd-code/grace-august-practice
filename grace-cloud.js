@@ -248,6 +248,14 @@ async function loadRemotePractice() {
   window.graceRender?.();
 }
 
+async function ensurePracticeRow(context) {
+  if (context.practiceId) return context.practiceId;
+  const payload = {plan_type:context.type,sort_order:context.index+1,title:context.title,minutes:context.minutes||0,translation:context.translation||"",tasks:context.tasks||[],question:context.question||null,active:true};
+  const result = await supabase.from("practice_items").insert(payload).select("id").single();
+  if (result.error) throw result.error;
+  return result.data.id;
+}
+
 async function loadPracticeAdmin() {
   const { data, error } = await supabase.from("practice_items").select("*").order("plan_type").order("sort_order");
   if (error) { $("practiceListAdmin").innerHTML = `<div class="cloud-empty">${escapeText(error.message)}</div>`; return; }
@@ -326,7 +334,10 @@ $("practiceScoreForm").addEventListener("submit", async event => {
   const insert = await supabase.from("scores").insert({title:$('practiceScoreTitle').value.trim(),composer:$('practiceScoreComposer').value.trim(),notes:$('practiceScoreNotes').value.trim(),file_path:path,page_count:pages,is_public:true});
   if (insert.error) { await supabase.storage.from("scores").remove([path]); return $("practiceScoreStatus").textContent = `保存失败：${insert.error.message}`; }
   const score = (await supabase.from("scores").select("id").eq("file_path",path).maybeSingle()).data;
-  if (practiceScoreContext.practiceId && score?.id) await supabase.from("practice_items").update({score_id:score.id}).eq("id",practiceScoreContext.practiceId);
+  let practiceId;
+  try { practiceId = await ensurePracticeRow(practiceScoreContext); }
+  catch (error) { return $("practiceScoreStatus").textContent = `关联失败：${error.message}`; }
+  if (score?.id) await supabase.from("practice_items").update({score_id:score.id}).eq("id",practiceId);
   if (practiceScoreContext.scorePath) await supabase.storage.from("scores").remove([practiceScoreContext.scorePath]);
   if (practiceScoreContext.scoreId) await supabase.from("scores").delete().eq("id",practiceScoreContext.scoreId);
   $("practiceScoreModal").classList.remove("show");

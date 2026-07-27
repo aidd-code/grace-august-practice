@@ -579,7 +579,7 @@
         });
         card.querySelector("[data-score-card-replace]")?.addEventListener("click", event => {
           event.stopPropagation();
-          window.openGracePracticeScoreManager?.({type, index, title:item.title, practiceId:item.id, scoreId:item.scoreId, scoreUrl:item.scoreUrl, scorePath:item.scorePath});
+          window.openGracePracticeScoreManager?.({type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id, scoreId:item.scoreId, scoreUrl:item.scoreUrl, scorePath:item.scorePath});
         });
         card.querySelector("[data-score-card-delete]")?.addEventListener("click", event => {
           event.stopPropagation();
@@ -587,7 +587,7 @@
         });
         card.querySelector("[data-score-card-upload]")?.addEventListener("click", event => {
           event.stopPropagation();
-          window.openGracePracticeScoreManager?.({type, index, title:item.title, practiceId:item.id});
+          window.openGracePracticeScoreManager?.({type, index, title:item.title, minutes:item.minutes, translation:item.translation, tasks:item.tasks, question:item.question, practiceId:item.id});
         });
         card.querySelectorAll("[data-field]").forEach(field => field.addEventListener("input", () => {
           getItem(selectedDay, index)[field.dataset.field] = field.value; saveState();

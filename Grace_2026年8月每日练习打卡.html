@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#725c8f">
-  <title>Grace 的八月练习花园</title>
+  <title>Grace 的每日练习花园</title>
   <style>
     :root {
       --ink: #312b3a;
@@ -53,7 +53,7 @@
     h1 { margin: 8px 0 8px; font-family: Georgia, "Songti SC", serif; font-size: clamp(34px, 5vw, 58px); font-weight: 500; line-height: 1.05; }
     .subtitle { margin: 0; color: var(--muted); font-size: 17px; }
     .hero-side { display: flex; flex-direction: column; align-items: flex-end; gap: 22px; }
-    .month-mark { color: var(--purple); font-family: Georgia, serif; font-size: 78px; line-height: .8; opacity: .18; }
+    .month-mark { color: var(--purple); font-family: Georgia, serif; font-size: 58px; line-height: .8; opacity: .18; }
 
     .month-panel, .day-panel {
       background: var(--paper);
@@ -65,6 +65,9 @@
     .month-panel { padding: 22px; margin-bottom: 22px; }
     .month-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }
     .month-top h2 { margin: 0; font-size: 20px; }
+    .calendar-nav { display: flex; align-items: center; gap: 8px; }
+    .calendar-nav button { min-height: 38px; padding: 0 12px; border: 0; border-radius: 11px; color: var(--purple-dark); background: #f0eaf1; font-weight: 750; cursor: pointer; }
+    .calendar-nav button:disabled { opacity: .35; cursor: default; }
     .month-progress { color: var(--muted); font-size: 14px; }
     .calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
     .weekday { padding: 2px 0 7px; color: var(--muted); font-size: 12px; font-weight: 700; text-align: center; }
@@ -84,6 +87,7 @@
     .date-btn.today:not(.selected) { border-color: var(--peach); }
     .date-num { display: block; font-size: 18px; font-weight: 800; }
     .date-type { display: block; margin-top: 3px; font-size: 11px; opacity: .72; }
+    .date-record { display: block; min-height: 14px; margin-top: 3px; font-size: 10px; opacity: .72; }
     .date-dot { display: inline-block; width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: rgba(114,92,143,.22); }
     .date-btn.some .date-dot { background: var(--peach); }
     .date-btn.complete .date-dot { background: var(--sage); }
@@ -270,10 +274,15 @@
       .month-mark { display: none; }
       .hero .auth-btn { min-height: 40px; padding: 0 12px; white-space: nowrap; }
       .month-panel { padding: 14px 10px; }
+      .month-top { align-items: flex-start; }
+      .calendar-nav { flex-wrap: wrap; }
+      .calendar-nav h2 { order: -1; width: 100%; }
+      .calendar-nav button { min-height: 34px; padding: 0 9px; font-size: 12px; }
       .calendar { gap: 5px; }
       .date-btn { min-height: 58px; padding: 7px 2px; border-radius: 13px; }
       .date-num { font-size: 16px; }
       .date-type { font-size: 10px; }
+      .date-record { min-height: 12px; font-size: 8px; }
       .day-head { padding: 22px 18px; }
       .ring { width: 76px; height: 76px; }
       .ring::before { width: 60px; height: 60px; }
@@ -302,19 +311,19 @@
     <header class="hero">
       <div>
         <div class="eyebrow">DAILY PRACTICE · 2026</div>
-        <h1>Grace 的八月练习花园</h1>
+        <h1>Grace 的练习花园</h1>
         <p class="subtitle">每天专注一点点，让音乐慢慢开花。</p>
       </div>
       <div class="hero-side">
-        <div class="month-mark" aria-hidden="true">08</div>
+        <div class="month-mark" aria-hidden="true">2026</div>
         <button class="auth-btn" id="authBtn" type="button">密码登录</button>
       </div>
     </header>
 
-    <section class="month-panel" aria-label="2026年8月日历">
+    <section class="month-panel" aria-label="练习日历">
       <div class="month-top">
-        <h2>2026 年 8 月</h2>
-        <div class="month-progress" id="monthProgress">本月完成 0 / 31 天</div>
+        <div class="calendar-nav"><button id="previousMonth" type="button">上个月</button><h2 id="calendarTitle">2026 年 7 月</h2><button id="nextMonth" type="button">下个月</button></div>
+        <div class="month-progress" id="monthProgress">本月完成 0 天</div>
       </div>
       <div class="calendar" id="calendar"></div>
     </section>
@@ -323,7 +332,7 @@
       <header class="day-head">
         <div>
           <div class="day-kicker" id="dayKicker">DAY A · A 日计划</div>
-          <h2 id="dayTitle">8 月 1 日 · 星期六</h2>
+          <h2 id="dayTitle">7 月 28 日 · 星期二</h2>
           <div class="day-summary" id="daySummary"></div>
         </div>
         <div class="ring" id="progressRing" aria-label="今日完成度"><span id="progressText">0%</span></div>
@@ -481,9 +490,12 @@
     };
 
     const STORAGE_KEY = "grace-practice-2026-08-v1";
+    const CALENDAR_START = "2026-07-28";
+    const PLAN_ANCHOR = "2026-08-01";
     const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
     let state = loadState();
-    let selectedDay = Math.min(31, Math.max(1, new Date().getFullYear() === 2026 && new Date().getMonth() === 7 ? new Date().getDate() : 1));
+    let selectedDay = initialSelectedDay();
+    let calendarMonth = selectedDay.slice(0, 7);
     let activeTimer = null;
     let timerTick = null;
     let allOpen = false;
@@ -497,16 +509,82 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       window.dispatchEvent(new CustomEvent("grace:practice-state-changed", {detail:{state}}));
     }
-    function dayKey(day) { return `2026-08-${String(day).padStart(2, "0")}`; }
-    function planType(day) { return state.typeOverrides[dayKey(day)] || (day % 2 ? "A" : "B"); }
+    function parseDateKey(key) {
+      const [year, month, day] = key.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    }
+    function dateKey(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    }
+    function addDays(key, amount) {
+      const date = parseDateKey(key);
+      date.setDate(date.getDate() + amount);
+      return dateKey(date);
+    }
+    function calendarDays(monthKey = calendarMonth) {
+      const days = [];
+      const [year, month] = monthKey.split("-").map(Number);
+      const first = `${year}-${String(month).padStart(2, "0")}-01`;
+      const lastDate = new Date(year, month, 0).getDate();
+      const start = first < CALENDAR_START ? CALENDAR_START : first;
+      const end = `${year}-${String(month).padStart(2, "0")}-${lastDate}`;
+      for (let key = start; key <= end; key = addDays(key, 1)) days.push(key);
+      return days;
+    }
+    function initialSelectedDay() {
+      const today = dateKey(new Date());
+      if (today < CALENDAR_START) return CALENDAR_START;
+      return today;
+    }
+    function dayLabel(key) {
+      const date = parseDateKey(key);
+      return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+    }
+    function planType(day) {
+      const override = state.typeOverrides[day];
+      if (override) return override;
+      const diff = Math.round((parseDateKey(day) - parseDateKey(PLAN_ANCHOR)) / 86400000);
+      return ((diff % 2) + 2) % 2 === 0 ? "A" : "B";
+    }
     function getDay(day) {
-      const key = dayKey(day);
+      const key = day;
       if (!state.days[key]) state.days[key] = { items: {}, journal: {} };
       return state.days[key];
     }
-    function getItem(day, index) {
+    function planItems(day) {
+      const dayData = state.days[day];
+      return dayData?.planSnapshot?.length ? dayData.planSnapshot : plans[planType(day)];
+    }
+    function ensurePlanSnapshot(day) {
       const dayData = getDay(day);
-      if (!dayData.items[index]) dayData.items[index] = { done: false, seconds: 0, checks: {}, note: "", answer: "" };
+      if (!dayData.planSnapshot) dayData.planSnapshot = JSON.parse(JSON.stringify(plans[planType(day)]));
+      return dayData.planSnapshot;
+    }
+    function hasMeaningfulDayData(dayData = {}) {
+      const hasItems = Object.values(dayData.items || {}).some(item =>
+        item.done || item.seconds > 0 || String(item.note || "").trim() ||
+        String(item.answer || "").trim() || Object.values(item.checks || {}).some(Boolean)
+      );
+      const hasJournal = Object.values(dayData.journal || {}).some(value => String(value || "").trim());
+      return hasItems || hasJournal;
+    }
+    function migratePlanSnapshots(targetState) {
+      let changed = false;
+      Object.entries(targetState.days || {}).forEach(([day, dayData]) => {
+        if (dayData.planSnapshot?.length || !hasMeaningfulDayData(dayData)) return;
+        const override = targetState.typeOverrides?.[day];
+        const diff = Math.round((parseDateKey(day) - parseDateKey(PLAN_ANCHOR)) / 86400000);
+        const type = override || ((((diff % 2) + 2) % 2 === 0) ? "A" : "B");
+        dayData.planSnapshot = JSON.parse(JSON.stringify(plans[type]));
+        changed = true;
+      });
+      return changed;
+    }
+    function getItem(day, index, create = true) {
+      const existing = state.days[day]?.items?.[index];
+      if (existing || !create) return existing || { done: false, seconds: 0, checks: {}, note: "", answer: "" };
+      const dayData = getDay(day);
+      dayData.items[index] = { done: false, seconds: 0, checks: {}, note: "", answer: "" };
       return dayData.items[index];
     }
     function escapeHtml(value = "") {
@@ -521,38 +599,48 @@
       return h ? `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
     }
     function dayProgress(day) {
-      const type = planType(day);
-      const completed = plans[type].filter((_, i) => getItem(day, i).done).length;
-      return { completed, total: plans[type].length, percent: Math.round(completed / plans[type].length * 100) };
+      const dayData = state.days[day] || {items:{}, journal:{}};
+      const items = planItems(day);
+      const completed = items.filter((_, i) => dayData.items?.[i]?.done).length;
+      return { completed, total: items.length, percent: Math.round(completed / items.length * 100), hasRecord:hasMeaningfulDayData(dayData) };
     }
 
     function renderCalendar() {
       const calendar = document.getElementById("calendar");
       let html = weekdays.map(d => `<div class="weekday">${d}</div>`).join("");
-      for (let i = 0; i < 6; i++) html += `<div aria-hidden="true"></div>`;
+      const days = calendarDays();
+      const startOffset = days.length ? parseDateKey(days[0]).getDay() : 0;
+      for (let i = 0; i < startOffset; i++) html += `<div aria-hidden="true"></div>`;
       const now = new Date();
-      for (let day = 1; day <= 31; day++) {
+      for (const day of days) {
         const progress = dayProgress(day);
-        const isToday = now.getFullYear() === 2026 && now.getMonth() === 7 && now.getDate() === day;
-        const status = progress.percent === 100 ? "complete" : progress.completed ? "some" : "";
-        html += `<button class="date-btn ${selectedDay === day ? "selected" : ""} ${isToday ? "today" : ""} ${status}" data-day="${day}" type="button" aria-label="8月${day}日，${planType(day)}日计划，完成${progress.percent}%">
-          <span class="date-num">${day}</span><span class="date-type">${planType(day)} 日</span><span class="date-dot"></span>
+        const isToday = dateKey(now) === day;
+        const date = parseDateKey(day);
+        const status = progress.percent === 100 ? "complete" : progress.hasRecord ? "some" : "";
+        html += `<button class="date-btn ${selectedDay === day ? "selected" : ""} ${isToday ? "today" : ""} ${status}" data-day="${day}" type="button" aria-label="${date.getMonth() + 1}月${date.getDate()}日，${planType(day)}日计划，完成${progress.percent}%">
+          <span class="date-num">${date.getDate()}</span><span class="date-type">${planType(day)} 日</span><span class="date-record">${progress.hasRecord ? (progress.percent ? `完成 ${progress.percent}%` : "已记录") : ""}</span><span class="date-dot"></span>
         </button>`;
       }
       calendar.innerHTML = html;
-      calendar.querySelectorAll("[data-day]").forEach(btn => btn.addEventListener("click", () => selectDay(Number(btn.dataset.day))));
-      const completeDays = Array.from({length:31}, (_,i) => dayProgress(i+1).percent === 100).filter(Boolean).length;
-      document.getElementById("monthProgress").textContent = `本月完成 ${completeDays} / 31 天`;
+      calendar.querySelectorAll("[data-day]").forEach(btn => btn.addEventListener("click", () => selectDay(btn.dataset.day)));
+      const completeDays = days.filter(day => dayProgress(day).percent === 100).length;
+      const recordedDays = days.filter(day => dayProgress(day).hasRecord).length;
+      const [year, month] = calendarMonth.split("-").map(Number);
+      document.getElementById("calendarTitle").textContent = `${year} 年 ${month} 月`;
+      document.getElementById("monthProgress").textContent = `本月记录 ${recordedDays} 天 · 完成 ${completeDays} 天`;
+      document.getElementById("previousMonth").disabled = calendarMonth <= CALENDAR_START.slice(0, 7);
     }
 
     function renderDay() {
       stopTimer();
       const type = planType(selectedDay);
-      const date = new Date(2026, 7, selectedDay);
+      const items = planItems(selectedDay);
+      const date = parseDateKey(selectedDay);
       const progress = dayProgress(selectedDay);
       document.getElementById("dayKicker").textContent = `DAY ${type} · ${type} 日计划`;
-      document.getElementById("dayTitle").textContent = `8 月 ${selectedDay} 日 · 星期${weekdays[date.getDay()]}`;
-      document.getElementById("daySummary").textContent = `${plans[type].length} 项内容 · 约 ${Math.floor(totalMinutes(type)/60)} 小时 ${totalMinutes(type)%60} 分钟`;
+      document.getElementById("dayTitle").textContent = `${dayLabel(selectedDay)} · 星期${weekdays[date.getDay()]}`;
+      const dayMinutes = items.reduce((sum, item) => sum + item.minutes, 0);
+      document.getElementById("daySummary").textContent = `${items.length} 项内容 · 约 ${Math.floor(dayMinutes/60)} 小时 ${dayMinutes%60} 分钟`;
       document.getElementById("progressText").textContent = `${progress.percent}%`;
       document.getElementById("progressRing").style.setProperty("--p", progress.percent);
       document.getElementById("typeA").classList.toggle("active", type === "A");
@@ -564,13 +652,16 @@
     window.gracePlans = plans;
     window.graceRender = () => { renderCalendar(); renderDay(); };
     window.graceSelectedDay = () => selectedDay;
+    window.graceSelectedDate = () => selectedDay;
     window.graceGetPracticeState = () => JSON.parse(JSON.stringify(state));
     window.graceApplyPracticeState = cloudState => {
       if (!cloudState?.days || !cloudState?.typeOverrides) return false;
       stopTimer();
       state = cloudState;
+      const migrated = migratePlanSnapshots(state);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderCalendar(); renderDay();
+      if (migrated && window.graceIsLoggedIn?.()) setTimeout(saveState, 0);
       return true;
     };
     window.addEventListener("grace:auth-changed", () => {
@@ -580,9 +671,10 @@
 
     function renderItems() {
       const type = planType(selectedDay);
+      const dayItems = planItems(selectedDay);
       const list = document.getElementById("practiceList");
-      list.innerHTML = plans[type].map((item, i) => {
-        const data = getItem(selectedDay, i);
+      list.innerHTML = dayItems.map((item, i) => {
+        const data = getItem(selectedDay, i, false);
         const scoreCount = item.scoreFiles?.length || (item.scoreUrl ? 1 : 0);
         const hasScore = scoreCount > 0;
         const checks = item.tasks.map((task, j) => `<label class="task-check"><input type="checkbox" data-check="${j}" ${data.checks[j] ? "checked" : ""}><span>${escapeHtml(task)}</span></label>`).join("");
@@ -613,7 +705,7 @@
 
       list.querySelectorAll(".practice-card").forEach(card => {
         const index = Number(card.dataset.index);
-        const item = plans[type][index];
+        const item = dayItems[index];
         card.querySelector(".card-summary").addEventListener("click", event => {
           if (event.target.closest(".check")) {
             event.stopPropagation();
@@ -632,6 +724,7 @@
             input.checked = !input.checked;
             return;
           }
+          ensurePlanSnapshot(selectedDay);
           getItem(selectedDay, index).checks[input.dataset.check] = input.checked; saveState();
         }));
         card.querySelectorAll("[data-score-card-open]").forEach(button => button.addEventListener("click", event => {
@@ -656,6 +749,7 @@
         });
         card.querySelectorAll("[data-field]").forEach(field => field.addEventListener("input", () => {
           if (!window.graceIsLoggedIn?.()) return;
+          ensurePlanSnapshot(selectedDay);
           getItem(selectedDay, index)[field.dataset.field] = field.value; saveState();
         }));
         card.querySelectorAll("[data-field]").forEach(field => {
@@ -666,6 +760,7 @@
         });
         card.querySelectorAll("[data-add]").forEach(btn => btn.addEventListener("click", () => {
           if (!window.graceRequireLogin?.()) return;
+          ensurePlanSnapshot(selectedDay);
           const data = getItem(selectedDay, index);
           data.seconds = Math.max(0, data.seconds + Number(btn.dataset.add));
           saveState(); updateItemTime(index);
@@ -681,10 +776,11 @@
         ["next", "明天从哪里继续", "还没有解决的问题是什么？"],
         ["research", type === "B" ? "研究问题速记" : "音乐与诗歌的联想", type === "B" ? "写下今天查到的历史线索或新问题" : "记下结构、和声、呼吸或诗意的发现"]
       ];
-      const journal = getDay(selectedDay).journal;
+      const journal = state.days[selectedDay]?.journal || {};
       document.getElementById("journalGrid").innerHTML = prompts.map((p, i) => `<div class="prompt ${i === 0 ? "wide" : ""}"><label for="journal-${p[0]}">${p[1]}</label><textarea id="journal-${p[0]}" data-journal="${p[0]}" placeholder="${p[2]}">${escapeHtml(journal[p[0]] || "")}</textarea></div>`).join("");
       document.querySelectorAll("[data-journal]").forEach(field => field.addEventListener("input", () => {
         if (!window.graceIsLoggedIn?.()) return;
+        ensurePlanSnapshot(selectedDay);
         getDay(selectedDay).journal[field.dataset.journal] = field.value; saveState();
       }));
       document.querySelectorAll("[data-journal]").forEach(field => {
@@ -692,16 +788,23 @@
       });
     }
 
-    function selectDay(day) { selectedDay = day; allOpen = false; renderCalendar(); renderDay(); window.scrollTo({top: document.querySelector(".day-panel").offsetTop - 16, behavior:"smooth"}); }
+    function selectDay(day) { selectedDay = day; calendarMonth = day.slice(0, 7); allOpen = false; renderCalendar(); renderDay(); window.scrollTo({top: document.querySelector(".day-panel").offsetTop - 16, behavior:"smooth"}); }
     function setType(type) {
       if (!window.graceRequireLogin?.()) return;
       stopTimer();
-      state.typeOverrides[dayKey(selectedDay)] = type;
+      if (dayProgress(selectedDay).hasRecord) {
+        showToast("这一天已有记录，已保留当日练习计划");
+        return;
+      }
+      state.typeOverrides[selectedDay] = type;
+      const dayData = getDay(selectedDay);
+      delete dayData.planSnapshot;
       saveState();
       allOpen = false;
       renderCalendar(); renderDay(); showToast(`已切换为 ${type} 日计划`);
     }
     function toggleDone(index) {
+      ensurePlanSnapshot(selectedDay);
       const data = getItem(selectedDay, index);
       data.done = !data.done; saveState();
       const openIndexes = [...document.querySelectorAll(".practice-card.open")].map(el => Number(el.dataset.index));
@@ -711,14 +814,23 @@
     }
     function toggleTimer(index) {
       if (activeTimer === index) { stopTimer(); updateTimerButtons(); return; }
-      stopTimer(); activeTimer = index; updateTimerButtons();
+      stopTimer();
+      ensurePlanSnapshot(selectedDay);
+      activeTimer = index; updateTimerButtons();
       timerTick = setInterval(() => {
         getItem(selectedDay, index).seconds += 1;
         if (getItem(selectedDay, index).seconds % 5 === 0) saveState();
         updateItemTime(index);
       }, 1000);
     }
-    function stopTimer() { if (timerTick) clearInterval(timerTick); timerTick = null; activeTimer = null; saveState(); updateTimerButtons(); }
+    function stopTimer() {
+      const wasRunning = timerTick !== null || activeTimer !== null;
+      if (timerTick) clearInterval(timerTick);
+      timerTick = null;
+      activeTimer = null;
+      if (wasRunning) saveState();
+      updateTimerButtons();
+    }
     function updateTimerButtons() {
       document.querySelectorAll("[data-timer]").forEach(btn => {
         const index = Number(btn.closest(".practice-card").dataset.index);
@@ -741,6 +853,19 @@
 
     document.getElementById("typeA").addEventListener("click", () => setType("A"));
     document.getElementById("typeB").addEventListener("click", () => setType("B"));
+    document.getElementById("previousMonth").addEventListener("click", () => {
+      if (calendarMonth <= CALENDAR_START.slice(0, 7)) return;
+      const [year, month] = calendarMonth.split("-").map(Number);
+      const previous = new Date(year, month - 2, 1);
+      calendarMonth = dateKey(previous).slice(0, 7);
+      renderCalendar();
+    });
+    document.getElementById("nextMonth").addEventListener("click", () => {
+      const [year, month] = calendarMonth.split("-").map(Number);
+      const next = new Date(year, month, 1);
+      calendarMonth = dateKey(next).slice(0, 7);
+      renderCalendar();
+    });
     document.getElementById("openAll").addEventListener("click", () => {
       allOpen = !allOpen;
       document.querySelectorAll(".practice-card").forEach(card => {

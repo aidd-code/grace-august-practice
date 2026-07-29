@@ -60,9 +60,12 @@
     context = detail;
     ensureModal();
     const appending = detail.mode === "append";
-    document.getElementById("collabScoreHeading").textContent = appending ? "继续添加乐谱文件" : (detail.scoreId ? "替换整组乐谱" : "上传练习乐谱");
-    document.getElementById("collabScoreHint").textContent = `可以一次选择多张图片或多个 PDF。上传后自动关联到“${detail.title}”，打开时可左右切换浏览。`;
-    document.getElementById("collabScoreSubmit").textContent = appending ? "添加到现有乐谱" : "上传并自动关联";
+    const libraryOnly = detail.mode === "library";
+    document.getElementById("collabScoreHeading").textContent = libraryOnly ? "上传到乐谱库" : (appending ? "继续添加乐谱文件" : (detail.scoreId ? "替换整组乐谱" : "上传练习乐谱"));
+    document.getElementById("collabScoreHint").textContent = libraryOnly
+      ? "可以一次选择多张图片或多个 PDF。这份乐谱暂时不关联某条练习，会独立保存在乐谱库中。"
+      : `可以一次选择多张图片或多个 PDF。上传后自动关联到“${detail.title}”，打开时可左右切换浏览。`;
+    document.getElementById("collabScoreSubmit").textContent = libraryOnly ? "上传到乐谱库" : (appending ? "添加到现有乐谱" : "上传并自动关联");
     document.getElementById("collabScoreTitle").value = detail.title || "";
     document.getElementById("collabScoreComposer").value = "";
     document.getElementById("collabScoreNotes").value = "";
@@ -124,14 +127,16 @@
         const score = scores?.[0];
         if (!score) throw new Error("没有生成乐谱记录");
         scoreId = score.id;
-        await request("/rest/v1/practice_score_links?on_conflict=plan_type,sort_order", { method:"POST", headers:{"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"}, body:JSON.stringify({plan_type:context.type,sort_order:context.index+1,score_id:score.id,updated_at:new Date().toISOString()}) });
+        if (context.mode !== "library") {
+          await request("/rest/v1/practice_score_links?on_conflict=plan_type,sort_order", { method:"POST", headers:{"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"}, body:JSON.stringify({plan_type:context.type,sort_order:context.index+1,score_id:score.id,updated_at:new Date().toISOString()}) });
+        }
         if (context.scoreId) await removeOld(context);
       }
       status.textContent = "上传成功，正在刷新当前练习…";
       closeModal();
       await loadLinks();
       window.dispatchEvent(new Event("grace:scores-changed"));
-      notify(`${files.length} 个乐谱文件已上传，并自动关联到这项练习`);
+      notify(context.mode === "library" ? `${files.length} 个文件已保存到乐谱库` : `${files.length} 个乐谱文件已上传，并自动关联到这项练习`);
     } catch (error) {
       if (scoreId && scoreId !== context.scoreId) await request(`/rest/v1/scores?id=eq.${encodeURIComponent(scoreId)}`, {method:"DELETE"}).catch(()=>{});
       await Promise.all(uploaded.map(file => deleteStoredFile(file.path).catch(()=>{})));

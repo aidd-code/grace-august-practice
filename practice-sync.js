@@ -26,11 +26,14 @@
     if (!state) return false;
     if (Object.keys(state.typeOverrides || {}).length) return true;
     return Object.values(state.days || {}).some(day => {
-      if (Object.values(day.journal || {}).some(value => String(value || "").trim())) return true;
-      return Object.values(day.items || {}).some(item =>
-        item.done || item.seconds > 0 || String(item.note || "").trim() ||
-        String(item.answer || "").trim() || Object.values(item.checks || {}).some(Boolean)
-      );
+      const planDays = day.plans ? Object.values(day.plans) : [day];
+      return planDays.some(planDay => {
+        if (Object.values(planDay.journal || {}).some(value => String(value || "").trim())) return true;
+        return Object.values(planDay.items || {}).some(item =>
+          item.done || item.seconds > 0 || String(item.note || "").trim() ||
+          String(item.answer || "").trim() || Object.values(item.checks || {}).some(Boolean)
+        );
+      });
     });
   }
 

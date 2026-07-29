@@ -18,7 +18,8 @@ style.textContent = `
   .score-toolbar{display:flex;gap:10px;align-items:center;min-height:66px;padding:10px 16px;background:#725c8f;color:white}
   .score-toolbar strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.score-toolbar .spacer{flex:1}.score-position{font-size:13px;white-space:nowrap}
   .score-toolbar button,.score-toolbar a{display:grid;place-items:center;min-height:42px;padding:0 14px;border:0;border-radius:12px;color:#57436f;background:white;font-weight:750;text-decoration:none;cursor:pointer}
-  .library-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}.library-head h2{margin:0;font-family:Georgia,"Songti SC",serif;font-weight:500}.library-head .spacer{flex:1}
+  .library-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px}.library-head h2{margin:0;font-family:Georgia,"Songti SC",serif;font-weight:500}.library-head .spacer{flex:1}
+  .library-upload{min-height:40px;padding:0 13px;border:0;border-radius:11px;color:white;background:#725c8f;font-weight:800;cursor:pointer}
   .library-close{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;font-size:24px;background:#f0eaf1;color:#57436f;text-decoration:none}
   .library-intro{margin:0 0 18px;color:#756d7d;font-size:13px;line-height:1.65}
   .cloud-card{margin:10px 0;padding:15px;border:1px solid rgba(80,62,96,.12);border-radius:16px;background:#fff}.cloud-card h3{margin:0 0 5px;font-size:16px}
@@ -33,8 +34,8 @@ document.head.appendChild(style);
 document.body.insertAdjacentHTML("beforeend", `
   <section class="score-shell" id="scoreShell" aria-label="Grace 乐谱库">
     <div class="score-sidebar">
-      <div class="library-head"><h2>Grace 乐谱库</h2><span class="spacer"></span><a class="library-close" href="#" id="closeScoreShell" aria-label="关闭">×</a></div>
-      <p class="library-intro">所有人都可以阅读 PDF 或图片乐谱；登录后可以上传、继续添加、替换和删除。每条练习支持多份文件，并可左右切换浏览。</p>
+      <div class="library-head"><h2>Grace 乐谱库</h2><span class="spacer"></span><button class="library-upload edit-only" id="libraryUpload" type="button">上传新乐谱</button><a class="library-close" href="#" id="closeScoreShell" aria-label="关闭">×</a></div>
+      <p class="library-intro">这里可以保存与当前练习暂时无关的 PDF 或图片乐谱。登录后可一次上传多个文件；上传后会留在乐谱库中，随时搜索和浏览。</p>
       <input id="scoreSearch" type="search" placeholder="搜索作曲家或乐谱名称" style="box-sizing:border-box;width:100%;min-height:46px;padding:0 14px;border:1px solid rgba(80,62,96,.15);border-radius:13px">
       <div id="scoreList"><div class="cloud-empty">正在读取乐谱库…</div></div>
     </div>
@@ -149,7 +150,7 @@ function renderScores() {
     const fileType = [...fileKinds].join(" + ");
     const deleteButton = window.graceIsLoggedIn?.() ? `<button class="danger-btn" data-delete-score="${row.id}" data-path="${escapeText(row.file_path)}" data-title="${escapeText(row.title)}" type="button">删除</button>` : "";
     return `<article class="cloud-card"><h3>${escapeText(row.title)}</h3><div class="cloud-meta">${files.length} 个文件 · ${fileType} · ${escapeText(row.composer || "未填写作曲家")}${row.page_count ? ` · 共 ${row.page_count} 页` : ""}${date ? ` · ${date}` : ""}</div>${displayNotes ? `<p style="line-height:1.55">${escapeText(displayNotes)}</p>` : ""}<div class="cloud-actions"><button class="open-score" data-open-score-id="${row.id}" type="button">阅读乐谱</button>${deleteButton}</div></article>`;
-  }).join("") : `<div class="cloud-empty">${term ? "没有找到匹配的乐谱" : "乐谱库还是空的。请从某条打卡内容里上传第一份 PDF 或图片。"}</div>`;
+  }).join("") : `<div class="cloud-empty">${term ? "没有找到匹配的乐谱" : "乐谱库还是空的。登录后点击“上传新乐谱”，可以一次选择多个 PDF 或图片。"}</div>`;
   $("scoreList").querySelectorAll("[data-open-score-id]").forEach(button => button.addEventListener("click", () => {
     const row = scoreRows.find(score => score.id === button.dataset.openScoreId);
     if (row) window.openGraceScores(scoreFiles(row), row.title);
@@ -159,7 +160,7 @@ function renderScores() {
 
 async function deleteScore(id, path, title) {
   if (!window.graceRequireLogin?.()) return;
-  if (!confirm(`确定删除“${title}”吗？关联它的打卡条也会变回“尚未上传”。`)) return;
+  if (!confirm(`确定删除“${title}”吗？如果它已关联某条练习，那条练习也会变回“尚未上传”。`)) return;
   const row = scoreRows.find(score => score.id === id);
   const paths = row ? scoreFiles(row).map(file => file.path) : [path];
   const storageResult = await supabase.storage.from("scores").remove(paths);
@@ -172,6 +173,10 @@ async function deleteScore(id, path, title) {
 }
 
 $("scoreLibraryBtn")?.addEventListener("click", event => { event.preventDefault(); openShell(); });
+$("libraryUpload").addEventListener("click", () => {
+  if (!window.graceRequireLogin?.()) return;
+  document.dispatchEvent(new CustomEvent("grace:score-manage", {detail:{mode:"library", title:""}}));
+});
 $("closeScoreShell").addEventListener("click", closeShell);
 function closeViewer() {
   $("scoreViewer").classList.remove("show");

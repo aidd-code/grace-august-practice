@@ -339,8 +339,8 @@
       </header>
 
       <div class="controls">
-        <span style="font-size:13px;color:var(--muted);font-weight:700">今天练：</span>
-        <div class="segmented" aria-label="切换今日计划">
+        <span style="font-size:13px;color:var(--muted);font-weight:700">查看计划：</span>
+        <div class="segmented" aria-label="切换 A 或 B 计划">
           <button id="typeA" type="button">A 日</button>
           <button id="typeB" type="button">B 日</button>
         </div>
@@ -494,7 +494,10 @@
     const PLAN_ANCHOR = "2026-08-01";
     const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
     let state = loadState();
+    const migratedLocalState = migrateDailyPlans(state);
+    if (migratedLocalState) localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     let selectedDay = initialSelectedDay();
+    let selectedType = initialPlanType(selectedDay);
     let calendarMonth = selectedDay.slice(0, 7);
     let activeTimer = null;
     let timerTick = null;
@@ -540,25 +543,29 @@
       const date = parseDateKey(key);
       return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
     }
-    function planType(day) {
-      const override = state.typeOverrides[day];
-      if (override) return override;
+    function defaultPlanType(day) {
       const diff = Math.round((parseDateKey(day) - parseDateKey(PLAN_ANCHOR)) / 86400000);
       return ((diff % 2) + 2) % 2 === 0 ? "A" : "B";
     }
-    function getDay(day) {
-      const key = day;
-      if (!state.days[key]) state.days[key] = { items: {}, journal: {} };
-      return state.days[key];
+    function getDateData(day, create = true) {
+      if (!state.days[day] && create) state.days[day] = {plans:{}};
+      return state.days[day];
     }
-    function planItems(day) {
-      const dayData = state.days[day];
-      return dayData?.planSnapshot?.length ? dayData.planSnapshot : plans[planType(day)];
+    function getPlanDay(day, type = selectedType, create = true) {
+      const dateData = getDateData(day, create);
+      if (!dateData) return undefined;
+      if (!dateData.plans) dateData.plans = {};
+      if (!dateData.plans[type] && create) dateData.plans[type] = {items:{}, journal:{}};
+      return dateData.plans[type];
     }
-    function ensurePlanSnapshot(day) {
-      const dayData = getDay(day);
-      if (!dayData.planSnapshot) dayData.planSnapshot = JSON.parse(JSON.stringify(plans[planType(day)]));
-      return dayData.planSnapshot;
+    function planItems(day, type = selectedType) {
+      const planDay = getPlanDay(day, type, false);
+      return planDay?.planSnapshot?.length ? planDay.planSnapshot : plans[type];
+    }
+    function ensurePlanSnapshot(day, type = selectedType) {
+      const planDay = getPlanDay(day, type);
+      if (!planDay.planSnapshot) planDay.planSnapshot = JSON.parse(JSON.stringify(plans[type]));
+      return planDay.planSnapshot;
     }
     function hasMeaningfulDayData(dayData = {}) {
       const hasItems = Object.values(dayData.items || {}).some(item =>
@@ -568,24 +575,32 @@
       const hasJournal = Object.values(dayData.journal || {}).some(value => String(value || "").trim());
       return hasItems || hasJournal;
     }
-    function migratePlanSnapshots(targetState) {
+    function migrateDailyPlans(targetState) {
       let changed = false;
       Object.entries(targetState.days || {}).forEach(([day, dayData]) => {
-        if (dayData.planSnapshot?.length || !hasMeaningfulDayData(dayData)) return;
-        const override = targetState.typeOverrides?.[day];
-        const diff = Math.round((parseDateKey(day) - parseDateKey(PLAN_ANCHOR)) / 86400000);
-        const type = override || ((((diff % 2) + 2) % 2 === 0) ? "A" : "B");
-        dayData.planSnapshot = JSON.parse(JSON.stringify(plans[type]));
-        changed = true;
+        if (!dayData.plans) {
+          const legacyType = targetState.typeOverrides?.[day] || defaultPlanType(day);
+          targetState.days[day] = {plans:{[legacyType]:{
+            items:dayData.items || {}, journal:dayData.journal || {}, ...(dayData.planSnapshot ? {planSnapshot:dayData.planSnapshot} : {})
+          }}};
+          dayData = targetState.days[day];
+          changed = true;
+        }
+        for (const type of ["A", "B"]) {
+          const planDay = dayData.plans[type];
+          if (!planDay || planDay.planSnapshot?.length || !hasMeaningfulDayData(planDay)) continue;
+          planDay.planSnapshot = JSON.parse(JSON.stringify(plans[type]));
+          changed = true;
+        }
       });
       return changed;
     }
-    function getItem(day, index, create = true) {
-      const existing = state.days[day]?.items?.[index];
+    function getItem(day, index, create = true, type = selectedType) {
+      const existing = getPlanDay(day, type, false)?.items?.[index];
       if (existing || !create) return existing || { done: false, seconds: 0, checks: {}, note: "", answer: "" };
-      const dayData = getDay(day);
-      dayData.items[index] = { done: false, seconds: 0, checks: {}, note: "", answer: "" };
-      return dayData.items[index];
+      const planDay = getPlanDay(day, type);
+      planDay.items[index] = { done: false, seconds: 0, checks: {}, note: "", answer: "" };
+      return planDay.items[index];
     }
     function escapeHtml(value = "") {
       return String(value).replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]));
@@ -598,11 +613,23 @@
       const s = seconds % 60;
       return h ? `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
     }
-    function dayProgress(day) {
-      const dayData = state.days[day] || {items:{}, journal:{}};
-      const items = planItems(day);
-      const completed = items.filter((_, i) => dayData.items?.[i]?.done).length;
-      return { completed, total: items.length, percent: Math.round(completed / items.length * 100), hasRecord:hasMeaningfulDayData(dayData) };
+    function dayProgress(day, type = selectedType) {
+      const planDay = getPlanDay(day, type, false) || {items:{}, journal:{}};
+      const items = planItems(day, type);
+      const completed = items.filter((_, i) => planDay.items?.[i]?.done).length;
+      return { completed, total: items.length, percent: Math.round(completed / items.length * 100), hasRecord:hasMeaningfulDayData(planDay) };
+    }
+    function dateProgress(day) {
+      const byType = {A:dayProgress(day, "A"), B:dayProgress(day, "B")};
+      const recorded = ["A", "B"].filter(type => byType[type].hasRecord);
+      const label = recorded.map(type => `${type} ${byType[type].percent ? `${byType[type].percent}%` : "已记录"}`).join(" · ");
+      return {byType, hasRecord:recorded.length > 0, complete:recorded.length > 0 && recorded.every(type => byType[type].percent === 100), label};
+    }
+    function initialPlanType(day) {
+      const progress = dateProgress(day);
+      if (progress.byType.A.hasRecord && !progress.byType.B.hasRecord) return "A";
+      if (progress.byType.B.hasRecord && !progress.byType.A.hasRecord) return "B";
+      return defaultPlanType(day);
     }
 
     function renderCalendar() {
@@ -613,18 +640,18 @@
       for (let i = 0; i < startOffset; i++) html += `<div aria-hidden="true"></div>`;
       const now = new Date();
       for (const day of days) {
-        const progress = dayProgress(day);
+        const progress = dateProgress(day);
         const isToday = dateKey(now) === day;
         const date = parseDateKey(day);
-        const status = progress.percent === 100 ? "complete" : progress.hasRecord ? "some" : "";
-        html += `<button class="date-btn ${selectedDay === day ? "selected" : ""} ${isToday ? "today" : ""} ${status}" data-day="${day}" type="button" aria-label="${date.getMonth() + 1}月${date.getDate()}日，${planType(day)}日计划，完成${progress.percent}%">
-          <span class="date-num">${date.getDate()}</span><span class="date-type">${planType(day)} 日</span><span class="date-record">${progress.hasRecord ? (progress.percent ? `完成 ${progress.percent}%` : "已记录") : ""}</span><span class="date-dot"></span>
+        const status = progress.complete ? "complete" : progress.hasRecord ? "some" : "";
+        html += `<button class="date-btn ${selectedDay === day ? "selected" : ""} ${isToday ? "today" : ""} ${status}" data-day="${day}" type="button" aria-label="${date.getMonth() + 1}月${date.getDate()}日，A 和 B 计划${progress.hasRecord ? `，${progress.label}` : ""}">
+          <span class="date-num">${date.getDate()}</span><span class="date-type">A / B</span><span class="date-record">${progress.label}</span><span class="date-dot"></span>
         </button>`;
       }
       calendar.innerHTML = html;
       calendar.querySelectorAll("[data-day]").forEach(btn => btn.addEventListener("click", () => selectDay(btn.dataset.day)));
-      const completeDays = days.filter(day => dayProgress(day).percent === 100).length;
-      const recordedDays = days.filter(day => dayProgress(day).hasRecord).length;
+      const completeDays = days.filter(day => dateProgress(day).complete).length;
+      const recordedDays = days.filter(day => dateProgress(day).hasRecord).length;
       const [year, month] = calendarMonth.split("-").map(Number);
       document.getElementById("calendarTitle").textContent = `${year} 年 ${month} 月`;
       document.getElementById("monthProgress").textContent = `本月记录 ${recordedDays} 天 · 完成 ${completeDays} 天`;
@@ -633,10 +660,10 @@
 
     function renderDay() {
       stopTimer();
-      const type = planType(selectedDay);
-      const items = planItems(selectedDay);
+      const type = selectedType;
+      const items = planItems(selectedDay, type);
       const date = parseDateKey(selectedDay);
-      const progress = dayProgress(selectedDay);
+      const progress = dayProgress(selectedDay, type);
       document.getElementById("dayKicker").textContent = `DAY ${type} · ${type} 日计划`;
       document.getElementById("dayTitle").textContent = `${dayLabel(selectedDay)} · 星期${weekdays[date.getDay()]}`;
       const dayMinutes = items.reduce((sum, item) => sum + item.minutes, 0);
@@ -658,7 +685,8 @@
       if (!cloudState?.days || !cloudState?.typeOverrides) return false;
       stopTimer();
       state = cloudState;
-      const migrated = migratePlanSnapshots(state);
+      const migrated = migrateDailyPlans(state);
+      selectedType = initialPlanType(selectedDay);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderCalendar(); renderDay();
       if (migrated && window.graceIsLoggedIn?.()) setTimeout(saveState, 0);
@@ -670,8 +698,8 @@
     });
 
     function renderItems() {
-      const type = planType(selectedDay);
-      const dayItems = planItems(selectedDay);
+      const type = selectedType;
+      const dayItems = planItems(selectedDay, type);
       const list = document.getElementById("practiceList");
       list.innerHTML = dayItems.map((item, i) => {
         const data = getItem(selectedDay, i, false);
@@ -769,39 +797,31 @@
     }
 
     function renderJournal() {
-      const type = planType(selectedDay);
+      const type = selectedType;
       const prompts = [
         ["goal", "今天唯一的核心目标", "例如：只解决 No. 5 的跳弓问题"],
         ["learned", "今天最满意的一件事", "哪个声音、动作或想法变得更好了？"],
         ["next", "明天从哪里继续", "还没有解决的问题是什么？"],
         ["research", type === "B" ? "研究问题速记" : "音乐与诗歌的联想", type === "B" ? "写下今天查到的历史线索或新问题" : "记下结构、和声、呼吸或诗意的发现"]
       ];
-      const journal = state.days[selectedDay]?.journal || {};
+      const journal = getPlanDay(selectedDay, type, false)?.journal || {};
       document.getElementById("journalGrid").innerHTML = prompts.map((p, i) => `<div class="prompt ${i === 0 ? "wide" : ""}"><label for="journal-${p[0]}">${p[1]}</label><textarea id="journal-${p[0]}" data-journal="${p[0]}" placeholder="${p[2]}">${escapeHtml(journal[p[0]] || "")}</textarea></div>`).join("");
       document.querySelectorAll("[data-journal]").forEach(field => field.addEventListener("input", () => {
         if (!window.graceIsLoggedIn?.()) return;
         ensurePlanSnapshot(selectedDay);
-        getDay(selectedDay).journal[field.dataset.journal] = field.value; saveState();
+        getPlanDay(selectedDay, type).journal[field.dataset.journal] = field.value; saveState();
       }));
       document.querySelectorAll("[data-journal]").forEach(field => {
         field.readOnly = !window.graceIsLoggedIn?.();
       });
     }
 
-    function selectDay(day) { selectedDay = day; calendarMonth = day.slice(0, 7); allOpen = false; renderCalendar(); renderDay(); window.scrollTo({top: document.querySelector(".day-panel").offsetTop - 16, behavior:"smooth"}); }
+    function selectDay(day) { selectedDay = day; selectedType = initialPlanType(day); calendarMonth = day.slice(0, 7); allOpen = false; renderCalendar(); renderDay(); window.scrollTo({top: document.querySelector(".day-panel").offsetTop - 16, behavior:"smooth"}); }
     function setType(type) {
-      if (!window.graceRequireLogin?.()) return;
       stopTimer();
-      if (dayProgress(selectedDay).hasRecord) {
-        showToast("这一天已有记录，已保留当日练习计划");
-        return;
-      }
-      state.typeOverrides[selectedDay] = type;
-      const dayData = getDay(selectedDay);
-      delete dayData.planSnapshot;
-      saveState();
+      selectedType = type;
       allOpen = false;
-      renderCalendar(); renderDay(); showToast(`已切换为 ${type} 日计划`);
+      renderDay();
     }
     function toggleDone(index) {
       ensurePlanSnapshot(selectedDay);
@@ -894,7 +914,7 @@
         try {
           const imported = JSON.parse(reader.result);
           if (!imported.days || !imported.typeOverrides) throw new Error("invalid");
-          state = imported; saveState(); modal.classList.remove("show"); renderCalendar(); renderDay(); showToast("记录已恢复");
+          state = imported; migrateDailyPlans(state); selectedType = initialPlanType(selectedDay); saveState(); modal.classList.remove("show"); renderCalendar(); renderDay(); showToast("记录已恢复");
         } catch { showToast("这个备份文件无法读取"); }
       };
       reader.readAsText(file);
@@ -907,8 +927,8 @@
     renderDay();
   </script>
   <script src="local-auth.js?v=20260727-1"></script>
-  <script src="score-collab.js?v=20260727-6"></script>
-  <script src="practice-sync.js?v=20260727-2"></script>
-  <script type="module" src="grace-cloud.js?v=20260727-13"></script>
+  <script src="score-collab.js?v=20260729-7"></script>
+  <script src="practice-sync.js?v=20260729-3"></script>
+  <script type="module" src="grace-cloud.js?v=20260729-14"></script>
 </body>
 </html>

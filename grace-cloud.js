@@ -174,7 +174,8 @@ async function deleteScore(id, path, title) {
 
 $("scoreLibraryBtn")?.addEventListener("click", event => { event.preventDefault(); openShell(); });
 $("libraryUpload").addEventListener("click", () => {
-  if (!window.graceRequireLogin?.()) return;
+  if (typeof window.graceRequireLogin === "function" && !window.graceRequireLogin()) return;
+  if (typeof window.graceRequireLogin !== "function" && document.body.classList.contains("read-only")) return;
   document.dispatchEvent(new CustomEvent("grace:score-manage", {detail:{mode:"library", title:""}}));
 });
 $("closeScoreShell").addEventListener("click", closeShell);

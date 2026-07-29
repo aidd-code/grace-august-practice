@@ -5,6 +5,12 @@
   const extensions = {"application/pdf":"pdf", "image/jpeg":"jpg", "image/png":"png", "image/webp":"webp", "image/gif":"gif", "image/heic":"heic", "image/heif":"heif"};
   let context = null;
 
+  function requireEditAccess() {
+    if (typeof window.graceRequireLogin === "function") return window.graceRequireLogin();
+    // The auth script can finish just after this module; the read-only class is the safe fallback.
+    return !document.body.classList.contains("read-only");
+  }
+
   function safe(value = "") {
     return String(value).replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]));
   }
@@ -56,7 +62,7 @@
   }
 
   function openModal(detail) {
-    if (!window.graceRequireLogin?.()) return;
+    if (!requireEditAccess()) return;
     context = detail;
     ensureModal();
     const appending = detail.mode === "append";
@@ -86,14 +92,14 @@
 
   async function upload(event) {
     event.preventDefault();
-    if (!window.graceRequireLogin?.()) return;
+    if (!requireEditAccess()) return;
     const files = [...document.getElementById("collabScoreFile").files];
     const status = document.getElementById("collabScoreStatus");
     const submitButton = document.getElementById("collabScoreSubmit");
     if (!files.length) return status.textContent = "请至少选择一个 PDF 或图片文件";
     const unsupported = files.filter(file => !isAllowedFile(file));
     if (unsupported.length) return status.textContent = `不支持这些文件：${unsupported.map(file => file.name).join("、")}`;
-    if (files.some(file => file.size > 25 * 1024 * 1024)) return status.textContent = "每个文件不能超过 25 MB";
+    if (files.some(file => file.size > 25 * 1024 * 1024)) return status.textContent = "每个文件不能超过 25 MB（约 25 × 1024 × 1024 字节）";
     submitButton.disabled = true;
     status.textContent = `正在上传 0 / ${files.length}…`;
     const uploaded = [];
@@ -188,7 +194,7 @@
   }
 
   async function remove(detail) {
-    if (!window.graceRequireLogin?.()) return;
+    if (!requireEditAccess()) return;
     if (!confirm(`确定删除“${detail.title}”关联的全部乐谱文件吗？`)) return;
     try {
       await request(`/rest/v1/practice_score_links?plan_type=eq.${detail.type}&sort_order=eq.${detail.index+1}`, {method:"DELETE"});

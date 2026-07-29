@@ -50,6 +50,8 @@
         <button id="collabScoreSubmit" type="submit">上传并自动关联</button><button class="secondary" id="collabScoreCancel" type="button">取消</button>
         <div class="cloud-status" id="collabScoreStatus"></div>
       </form></div></div>`);
+    // The library is a z-index 40 overlay; the upload form must sit above it.
+    document.getElementById("collabScoreModal").style.zIndex = "60";
     document.getElementById("collabScoreCancel").addEventListener("click", closeModal);
     document.getElementById("collabScoreForm").addEventListener("submit", upload);
     document.getElementById("collabScoreFile").addEventListener("change", event => {

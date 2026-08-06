@@ -7,6 +7,10 @@ let scoreRows = [];
 let viewerFiles = [];
 let viewerIndex = 0;
 let viewerGroupTitle = "乐谱";
+let viewerPdf = null;
+let viewerPdfUrl = "";
+let viewerPdfPage = 1;
+let pdfjsPromise = null;
 
 const style = document.createElement("style");
 style.textContent = `
@@ -14,7 +18,7 @@ style.textContent = `
   .score-shell.show,.score-shell:target{display:grid;grid-template-columns:minmax(330px,38%) 1fr}
   .score-sidebar{overflow:auto;padding:24px;background:#fffdf9;border-right:1px solid rgba(80,62,96,.14)}
   .score-viewer{display:flex;flex-direction:column;min-width:0;background:#ddd7df}
-  .score-viewer iframe{width:100%;height:100%;border:0;background:white}.score-viewer-image{display:none;box-sizing:border-box;width:100%;height:100%;padding:20px;object-fit:contain;background:#211f22}
+  .score-viewer iframe{display:none;width:100%;height:100%;border:0;background:white}.score-canvas-wrap{display:flex;flex:1;min-height:0;align-items:center;justify-content:center;overflow:auto;padding:18px;background:#211f22}.score-canvas-wrap canvas{display:block;max-width:100%;height:auto;background:white;box-shadow:0 5px 18px rgba(0,0,0,.28)}.score-viewer-image{display:none;box-sizing:border-box;width:100%;height:100%;padding:20px;object-fit:contain;background:#211f22}.score-loading{display:none;color:#fff;font-size:16px;text-align:center}.score-pdf-position{display:none;font-size:13px;white-space:nowrap}
   .score-toolbar{display:flex;gap:10px;align-items:center;min-height:66px;padding:10px 16px;background:#725c8f;color:white}
   .score-toolbar strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.score-toolbar .spacer{flex:1}.score-position{font-size:13px;white-space:nowrap}
   .score-toolbar button,.score-toolbar a{display:grid;place-items:center;min-height:42px;padding:0 14px;border:0;border-radius:12px;color:#57436f;background:white;font-weight:750;text-decoration:none;cursor:pointer}
@@ -40,8 +44,8 @@ document.body.insertAdjacentHTML("beforeend", `
       <div id="scoreList"><div class="cloud-empty">正在读取乐谱库…</div></div>
     </div>
     <div class="score-viewer" id="scoreViewer">
-      <div class="score-toolbar"><button id="backToLibrary" type="button">返回</button><button id="previousScore" type="button">上一份</button><strong id="viewerTitle">请选择乐谱</strong><span class="spacer"></span><span class="score-position" id="scorePosition"></span><button id="nextScore" type="button">下一份</button><a id="openScoreNew" href="#" target="_blank" rel="noopener">新窗口</a><button id="closeViewer" type="button">关闭</button></div>
-      <iframe id="scoreFrame" title="PDF 乐谱阅读器"></iframe><img class="score-viewer-image" id="scoreImage" alt="乐谱图片">
+      <div class="score-toolbar"><button id="backToLibrary" type="button">返回</button><button id="previousScore" type="button">上一份</button><strong id="viewerTitle">请选择乐谱</strong><span class="spacer"></span><span class="score-position" id="scorePosition"></span><span class="score-pdf-position" id="pdfPosition"></span><button id="pdfPreviousPage" type="button">上一页</button><button id="pdfNextPage" type="button">下一页</button><button id="nextScore" type="button">下一份</button><a id="openScoreNew" href="#" target="_blank" rel="noopener">新窗口</a><button id="closeViewer" type="button">关闭</button></div>
+      <div class="score-canvas-wrap" id="scoreCanvasWrap"><canvas id="scoreCanvas"></canvas><div class="score-loading" id="scoreLoading">正在加载乐谱…</div></div><iframe id="scoreFrame" title="PDF 乐谱阅读器"></iframe><img class="score-viewer-image" id="scoreImage" alt="乐谱图片">
     </div>
   </section>
 `);
@@ -91,27 +95,72 @@ function closeShell(event) {
   shell.classList.remove("show");
   $("scoreViewer").classList.remove("show");
   $("scoreFrame").src = "about:blank";
+  $("scoreCanvas").width = 1; $("scoreCanvas").height = 1;
   $("scoreImage").removeAttribute("src");
   document.body.style.overflow = "";
   if (location.hash === "#scoreShell") history.replaceState(null, "", location.pathname + location.search);
 }
 
 window.openGraceLibrary = openShell;
-function showViewerFile(index) {
+async function loadPdfJs() {
+  if (!pdfjsPromise) pdfjsPromise = import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs").then(pdfjs => {
+    pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+    return pdfjs;
+  });
+  return pdfjsPromise;
+}
+
+async function renderPdfPage() {
+  if (!viewerPdf) return;
+  const page = await viewerPdf.getPage(viewerPdfPage);
+  const wrap = $("scoreCanvasWrap");
+  const baseViewport = page.getViewport({scale:1});
+  const maxWidth = Math.max(280, wrap.clientWidth - 36);
+  const maxHeight = Math.max(360, wrap.clientHeight - 36);
+  const scale = Math.min(maxWidth / baseViewport.width, maxHeight / baseViewport.height, 2.2);
+  const viewport = page.getViewport({scale});
+  const canvas = $("scoreCanvas");
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.floor(viewport.width * ratio);
+  canvas.height = Math.floor(viewport.height * ratio);
+  canvas.style.width = `${Math.floor(viewport.width)}px`;
+  canvas.style.height = `${Math.floor(viewport.height)}px`;
+  await page.render({canvasContext:canvas.getContext("2d"), viewport, transform:ratio !== 1 ? [ratio,0,0,ratio,0,0] : null}).promise;
+  $("pdfPosition").textContent = `第 ${viewerPdfPage} / ${viewerPdf.numPages} 页`;
+  $("pdfPreviousPage").style.display = viewerPdf.numPages > 1 ? "grid" : "none";
+  $("pdfNextPage").style.display = viewerPdf.numPages > 1 ? "grid" : "none";
+  $("pdfPreviousPage").disabled = viewerPdfPage <= 1;
+  $("pdfNextPage").disabled = viewerPdfPage >= viewerPdf.numPages;
+}
+
+async function showViewerFile(index) {
   if (!viewerFiles.length) return;
   viewerIndex = (index + viewerFiles.length) % viewerFiles.length;
   const file = viewerFiles[viewerIndex];
   const url = file.url || publicUrl(file.path);
   const image = isImagePath(file.path || url);
-  $("scoreFrame").style.display = image ? "none" : "block";
+  $("scoreFrame").style.display = "none";
+  $("scoreCanvasWrap").style.display = image ? "none" : "flex";
   $("scoreImage").style.display = image ? "block" : "none";
+  $("pdfPosition").style.display = image ? "none" : "inline";
   if (image) {
-    $("scoreFrame").src = "about:blank";
+    viewerPdf = null; viewerPdfUrl = "";
     $("scoreImage").src = url;
     $("scoreImage").alt = file.name || viewerGroupTitle;
   } else {
     $("scoreImage").removeAttribute("src");
-    $("scoreFrame").src = url;
+    $("scoreLoading").style.display = "block";
+    $("scoreCanvas").style.display = "none";
+    try {
+      if (viewerPdfUrl !== url) { viewerPdf = await (await loadPdfJs()).getDocument({url}).promise; viewerPdfUrl = url; }
+      viewerPdfPage = Math.min(Math.max(1, viewerPdfPage), viewerPdf.numPages);
+      $("scoreCanvas").style.display = "block";
+      await renderPdfPage();
+      $("scoreLoading").style.display = "none";
+    } catch (error) {
+      $("scoreLoading").textContent = "PDF 暂时无法在页面内显示，请点击“新窗口”打开";
+      console.warn("PDF render failed", error);
+    }
   }
   $("viewerTitle").textContent = file.name || viewerGroupTitle;
   $("scorePosition").textContent = `${viewerIndex + 1} / ${viewerFiles.length}`;
@@ -124,6 +173,7 @@ window.openGraceScores = (files, title = "乐谱") => {
   openShell();
   viewerFiles = (files || []).filter(file => file?.url || file?.path);
   viewerGroupTitle = title;
+  viewerPdf = null; viewerPdfUrl = ""; viewerPdfPage = 1;
   showViewerFile(0);
   $("scoreViewer").classList.add("show");
 };
@@ -182,6 +232,7 @@ $("closeScoreShell").addEventListener("click", closeShell);
 function closeViewer() {
   $("scoreViewer").classList.remove("show");
   $("scoreFrame").src = "about:blank";
+  viewerPdf = null; viewerPdfUrl = ""; viewerPdfPage = 1;
   $("scoreImage").removeAttribute("src");
 }
 
@@ -189,6 +240,8 @@ $("closeViewer").addEventListener("click", closeShell);
 $("backToLibrary").addEventListener("click", closeViewer);
 $("previousScore").addEventListener("click", () => showViewerFile(viewerIndex - 1));
 $("nextScore").addEventListener("click", () => showViewerFile(viewerIndex + 1));
+$("pdfPreviousPage").addEventListener("click", async () => { if (viewerPdf && viewerPdfPage > 1) { viewerPdfPage--; await renderPdfPage(); } });
+$("pdfNextPage").addEventListener("click", async () => { if (viewerPdf && viewerPdfPage < viewerPdf.numPages) { viewerPdfPage++; await renderPdfPage(); } });
 let touchStartX = null;
 $("scoreViewer").addEventListener("touchstart", event => { touchStartX = event.touches[0]?.clientX ?? null; }, {passive:true});
 $("scoreViewer").addEventListener("touchend", event => {

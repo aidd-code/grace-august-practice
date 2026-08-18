@@ -586,11 +586,12 @@
       if (!planDay.planSnapshot) planDay.planSnapshot = JSON.parse(JSON.stringify(scheduledPlan(day, type)));
       return planDay.planSnapshot;
     }
+    function hasMeaningfulItemData(item = {}) {
+      return item.done || item.seconds > 0 || String(item.note || "").trim() ||
+        String(item.answer || "").trim() || Object.values(item.checks || {}).some(Boolean);
+    }
     function hasMeaningfulDayData(dayData = {}) {
-      const hasItems = Object.values(dayData.items || {}).some(item =>
-        item.done || item.seconds > 0 || String(item.note || "").trim() ||
-        String(item.answer || "").trim() || Object.values(item.checks || {}).some(Boolean)
-      );
+      const hasItems = Object.values(dayData.items || {}).some(hasMeaningfulItemData);
       const hasJournal = Object.values(dayData.journal || {}).some(value => String(value || "").trim());
       return hasItems || hasJournal;
     }
@@ -713,6 +714,9 @@
       document.getElementById("progressRing").style.setProperty("--p", progress.percent);
       document.getElementById("typeA").classList.toggle("active", type === "A");
       document.getElementById("typeB").classList.toggle("active", type === "B");
+      const dateRecord = dateProgress(selectedDay);
+      document.getElementById("typeA").textContent = dateRecord.byType.A.hasRecord ? `A 日 · ${dateRecord.byType.A.percent}%` : "A 日";
+      document.getElementById("typeB").textContent = dateRecord.byType.B.hasRecord ? `B 日 · ${dateRecord.byType.B.percent}%` : "B 日";
       renderItems();
       renderJournal();
     }
@@ -744,11 +748,13 @@
       const list = document.getElementById("practiceList");
       list.innerHTML = dayItems.map((item, i) => {
         const data = getItem(selectedDay, i, false);
+        const itemRecorded = hasMeaningfulItemData(data);
+        const itemOpen = allOpen || itemRecorded;
         const scoreCount = item.scoreFiles?.length || (item.scoreUrl ? 1 : 0);
         const hasScore = scoreCount > 0;
         const checks = item.tasks.map((task, j) => `<label class="task-check"><input type="checkbox" data-check="${j}" ${data.checks[j] ? "checked" : ""}><span>${escapeHtml(task)}</span></label>`).join("");
-        return `<article class="practice-card ${data.done ? "done" : ""} ${allOpen ? "open" : ""}" data-index="${i}">
-          <button class="card-summary" type="button" aria-expanded="${allOpen}">
+        return `<article class="practice-card ${data.done ? "done" : ""} ${itemOpen ? "open" : ""}" data-index="${i}">
+          <button class="card-summary" type="button" aria-expanded="${itemOpen}">
             <span class="check" role="checkbox" aria-checked="${data.done}">${data.done ? "✓" : ""}</span>
             <span><span class="number">练习 ${String(i+1).padStart(2,"0")}</span><span class="card-title">${escapeHtml(item.title)}</span><span class="card-meta">目标 · ${targetText(item)}</span></span>
             <span class="time-pill">${data.seconds ? formatClock(data.seconds) : targetText(item)}</span><span class="chevron">⌄</span>

@@ -490,7 +490,18 @@
     };
 
     const STORAGE_KEY = "grace-practice-2026-08-v1";
-    const PRACTICE_CONTENT_VERSION = 2;
+    const PRACTICE_CONTENT_VERSION = 3;
+    const PAGANINI_CHANGE_EFFECTIVE = "2026-08-18";
+    const PAGANINI_PREVIOUS_CONTENT = {
+      "帕格尼尼第 5 号随想曲": {
+        translation: "只练开头与结尾的音阶。使用节奏变奏；在 A 弦上前后移动左手练换把；练泛音附近的“青蛙动作”；下行乐段使用左手拨弦。",
+        tasks: ["节奏变奏：练“一长三短”和“三短一长”", "A 弦换把：左手像雨刮器一样整体前后滑动", "弓根动作：手腕像青蛙跳跃一样有弹性，不僵硬压弦", "左手拨弦后手指迅速离弦，右手弓子提前准备衔接"]
+      },
+      "帕格尼尼第 9 号随想曲": {
+        translation: "只练第一部分，尽可能多使用连弓。目标是得到最平滑、最连贯圆润的声音。",
+        tasks: ["一弓多音时，左手换指与右手换弦做到零延迟同步", "想象弓子涂了黄油；食指感知弓毛摩擦力，让声音持续"]
+      }
+    };
     const CALENDAR_START = "2026-07-28";
     const PLAN_ANCHOR = "2026-08-01";
     const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
@@ -559,13 +570,20 @@
       if (!dateData.plans[type] && create) dateData.plans[type] = {items:{}, journal:{}};
       return dateData.plans[type];
     }
+    function scheduledPlan(day, type = selectedType) {
+      if (type !== "A" || day >= PAGANINI_CHANGE_EFFECTIVE) return plans[type];
+      return plans.A.map(item => {
+        const previous = PAGANINI_PREVIOUS_CONTENT[item.title];
+        return previous ? {...item, translation:previous.translation, tasks:[...previous.tasks]} : item;
+      });
+    }
     function planItems(day, type = selectedType) {
       const planDay = getPlanDay(day, type, false);
-      return planDay?.planSnapshot?.length ? planDay.planSnapshot : plans[type];
+      return planDay?.planSnapshot?.length ? planDay.planSnapshot : scheduledPlan(day, type);
     }
     function ensurePlanSnapshot(day, type = selectedType) {
       const planDay = getPlanDay(day, type);
-      if (!planDay.planSnapshot) planDay.planSnapshot = JSON.parse(JSON.stringify(plans[type]));
+      if (!planDay.planSnapshot) planDay.planSnapshot = JSON.parse(JSON.stringify(scheduledPlan(day, type)));
       return planDay.planSnapshot;
     }
     function hasMeaningfulDayData(dayData = {}) {
@@ -576,12 +594,13 @@
       const hasJournal = Object.values(dayData.journal || {}).some(value => String(value || "").trim());
       return hasItems || hasJournal;
     }
-    function updatePaganiniSnapshot(planDay) {
+    function updatePaganiniSnapshot(planDay, day) {
       if (!planDay?.planSnapshot?.length) return false;
       let changed = false;
+      const datedPlan = scheduledPlan(day, "A");
       for (const title of ["帕格尼尼第 5 号随想曲", "帕格尼尼第 9 号随想曲"]) {
         const current = planDay.planSnapshot.find(item => item.title === title);
-        const latest = plans.A.find(item => item.title === title);
+        const latest = datedPlan.find(item => item.title === title);
         if (!current || !latest) continue;
         if (current.translation !== latest.translation || JSON.stringify(current.tasks) !== JSON.stringify(latest.tasks)) {
           current.translation = latest.translation;
@@ -593,7 +612,7 @@
     }
     function migrateDailyPlans(targetState) {
       let changed = false;
-      const shouldUpdatePaganini = Number(targetState.practiceContentVersion || 0) < PRACTICE_CONTENT_VERSION;
+      const shouldApplyDatedPlans = Number(targetState.practiceContentVersion || 0) < PRACTICE_CONTENT_VERSION;
       Object.entries(targetState.days || {}).forEach(([day, dayData]) => {
         if (!dayData.plans) {
           const legacyType = targetState.typeOverrides?.[day] || defaultPlanType(day);
@@ -605,13 +624,13 @@
         }
         for (const type of ["A", "B"]) {
           const planDay = dayData.plans[type];
-          if (type === "A" && shouldUpdatePaganini && updatePaganiniSnapshot(planDay)) changed = true;
+          if (type === "A" && shouldApplyDatedPlans && updatePaganiniSnapshot(planDay, day)) changed = true;
           if (!planDay || planDay.planSnapshot?.length || !hasMeaningfulDayData(planDay)) continue;
-          planDay.planSnapshot = JSON.parse(JSON.stringify(plans[type]));
+          planDay.planSnapshot = JSON.parse(JSON.stringify(scheduledPlan(day, type)));
           changed = true;
         }
       });
-      if (shouldUpdatePaganini) {
+      if (shouldApplyDatedPlans) {
         targetState.practiceContentVersion = PRACTICE_CONTENT_VERSION;
         changed = true;
       }

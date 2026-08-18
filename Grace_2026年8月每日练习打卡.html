@@ -490,6 +490,7 @@
     };
 
     const STORAGE_KEY = "grace-practice-2026-08-v1";
+    const PRACTICE_CONTENT_VERSION = 2;
     const CALENDAR_START = "2026-07-28";
     const PLAN_ANCHOR = "2026-08-01";
     const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
@@ -575,8 +576,24 @@
       const hasJournal = Object.values(dayData.journal || {}).some(value => String(value || "").trim());
       return hasItems || hasJournal;
     }
+    function updatePaganiniSnapshot(planDay) {
+      if (!planDay?.planSnapshot?.length) return false;
+      let changed = false;
+      for (const title of ["帕格尼尼第 5 号随想曲", "帕格尼尼第 9 号随想曲"]) {
+        const current = planDay.planSnapshot.find(item => item.title === title);
+        const latest = plans.A.find(item => item.title === title);
+        if (!current || !latest) continue;
+        if (current.translation !== latest.translation || JSON.stringify(current.tasks) !== JSON.stringify(latest.tasks)) {
+          current.translation = latest.translation;
+          current.tasks = JSON.parse(JSON.stringify(latest.tasks));
+          changed = true;
+        }
+      }
+      return changed;
+    }
     function migrateDailyPlans(targetState) {
       let changed = false;
+      const shouldUpdatePaganini = Number(targetState.practiceContentVersion || 0) < PRACTICE_CONTENT_VERSION;
       Object.entries(targetState.days || {}).forEach(([day, dayData]) => {
         if (!dayData.plans) {
           const legacyType = targetState.typeOverrides?.[day] || defaultPlanType(day);
@@ -588,11 +605,16 @@
         }
         for (const type of ["A", "B"]) {
           const planDay = dayData.plans[type];
+          if (type === "A" && shouldUpdatePaganini && updatePaganiniSnapshot(planDay)) changed = true;
           if (!planDay || planDay.planSnapshot?.length || !hasMeaningfulDayData(planDay)) continue;
           planDay.planSnapshot = JSON.parse(JSON.stringify(plans[type]));
           changed = true;
         }
       });
+      if (shouldUpdatePaganini) {
+        targetState.practiceContentVersion = PRACTICE_CONTENT_VERSION;
+        changed = true;
+      }
       return changed;
     }
     function getItem(day, index, create = true, type = selectedType) {

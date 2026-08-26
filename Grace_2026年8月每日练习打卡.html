@@ -350,7 +350,7 @@
         <div class="segmented" id="planModeControls" aria-label="当前计划">
           <button id="typeA" type="button">A 日</button>
           <button id="typeB" type="button">B 日</button>
-          <button id="typeUnified" type="button">完整练习</button>
+          <button id="typeUnified" type="button">昨日练习</button>
         </div>
         <span class="spacer"></span>
         <a class="primary-btn" id="scoreLibraryBtn" href="#scoreShell" style="display:grid;place-items:center;text-decoration:none">乐谱库</a>
@@ -392,8 +392,9 @@
 
   <div class="modal" id="planModal" role="dialog" aria-modal="true" aria-labelledby="planModalTitle">
     <div class="modal-box plan-modal-box">
-      <h3 id="planModalTitle">编辑完整练习</h3>
+      <h3 id="planModalTitle">编辑今日练习</h3>
       <p id="planModalIntro">登录后可以调整当天要打卡的项目。没有修改的日期会自动沿用前一天。</p>
+      <div style="display:flex;gap:8px;align-items:center;margin:12px 0;padding:12px;border-radius:12px;background:#f3edf4"><select id="planLibrarySelect" style="flex:1;min-height:42px;border:1px solid var(--line);border-radius:10px;padding:0 10px"><option value="">从完整练习库选择…</option></select><button class="small-btn" id="addFromPlanLibrary" type="button">加入今日</button></div>
       <div id="planEditorList"></div>
       <div class="modal-actions plan-editor-actions"><button class="ghost-btn" id="addPlanItem" type="button">＋添加练习</button><span class="spacer"></span><button class="ghost-btn" id="cancelPlanEdit" type="button">取消</button><button class="primary-btn" id="savePlanEdit" type="button">保存今日计划</button></div>
     </div>
@@ -510,7 +511,7 @@
     const STORAGE_KEY = "grace-practice-2026-08-v1";
     const PRACTICE_CONTENT_VERSION = 3;
     const UNIFIED_PLAN_START = "2026-08-26";
-    const UNIFIED_PLAN_VERSION = 4;
+    const UNIFIED_PLAN_VERSION = 5;
     const PAGANINI_CHANGE_EFFECTIVE = "2026-08-18";
     const PAGANINI_PREVIOUS_CONTENT = {
       "帕格尼尼第 5 号随想曲": {
@@ -601,16 +602,24 @@
       });
       return merged;
     }
-    function unifiedPlan(day) {
-      const saved = getPlanDay(day, "U", false)?.planSnapshot;
-      if (saved?.length) return saved;
+    function yesterdayPlan(day) {
+      const previous = addDays(day, -1);
+      const priorUnified = getPlanDay(previous, "U", false)?.planSnapshot;
+      if (priorUnified?.length) return clonePlan(priorUnified);
+      return clonePlan(planItems(previous, defaultPlanType(previous)));
+    }
+    function baselineUnifiedPlan(day) {
+      if (day === UNIFIED_PLAN_START) return yesterdayPlan(day);
       const earlier = Object.keys(state.days || {}).filter(key => key >= UNIFIED_PLAN_START && key < day).sort().reverse();
       for (const key of earlier) {
         const prior = getPlanDay(key, "U", false)?.planSnapshot;
         if (prior?.length) return clonePlan(prior);
       }
-      const previous = addDays(UNIFIED_PLAN_START, -1);
-      return mergePlans(planItems(previous, "A"), planItems(previous, "B"));
+      return yesterdayPlan(day);
+    }
+    function unifiedPlan(day) {
+      const saved = getPlanDay(day, "U", false)?.planSnapshot;
+      return saved?.length ? saved : baselineUnifiedPlan(day);
     }
     function scheduledPlan(day, type = selectedType) {
       if (type !== "A" || day >= PAGANINI_CHANGE_EFFECTIVE) return plans[type];
@@ -651,11 +660,18 @@
     function migrateUnifiedPlans(targetState) {
       let changed = false;
       for (const [day, dayData] of Object.entries(targetState.days || {})) {
-        if (day < UNIFIED_PLAN_START || !dayData?.plans || dayData.plans.U?.planSnapshot?.length) continue;
+        if (day < UNIFIED_PLAN_START || !dayData?.plans) continue;
+        if (dayData.plans.U?.planSnapshot?.length) {
+          if (Number(targetState.unifiedPlanVersion || 0) < UNIFIED_PLAN_VERSION && day === UNIFIED_PLAN_START && !hasMeaningfulDayData(dayData.plans.U)) {
+            dayData.plans.U.planSnapshot = yesterdayPlan(day);
+            changed = true;
+          }
+          continue;
+        }
         const aPlan = dayData.plans.A;
         const bPlan = dayData.plans.B;
         if (!aPlan && !bPlan) continue;
-        const merged = mergePlans(planItems(day, "A"), planItems(day, "B"));
+        const merged = day === UNIFIED_PLAN_START ? yesterdayPlan(day) : mergePlans(planItems(day, "A"), planItems(day, "B"));
         if (!merged.length) continue;
         dayData.plans.U = {items:{}, journal:{}, planSnapshot:merged};
         const sources = [aPlan, bPlan];
@@ -790,7 +806,7 @@
       const items = planItems(selectedDay, type);
       const date = parseDateKey(selectedDay);
       const progress = dayProgress(selectedDay, type);
-      document.getElementById("dayKicker").textContent = type === "U" ? "TODAY · 完整练习" : `DAY ${type} · ${type} 日计划`;
+      document.getElementById("dayKicker").textContent = type === "U" ? "TODAY · 今日练习" : `DAY ${type} · ${type} 日计划`;
       document.getElementById("dayTitle").textContent = `${dayLabel(selectedDay)} · 星期${weekdays[date.getDay()]}`;
       const dayMinutes = items.reduce((sum, item) => sum + item.minutes, 0);
       document.getElementById("daySummary").textContent = `${items.length} 项内容 · 约 ${Math.floor(dayMinutes/60)} 小时 ${dayMinutes%60} 分钟`;
@@ -955,6 +971,8 @@
     function renderPlanEditor() {
       const list = document.getElementById("planEditorList");
       const items = ensurePlanSnapshot(selectedDay, "U");
+      const library = mergePlans(plans.A, plans.B);
+      document.getElementById("planLibrarySelect").innerHTML = `<option value="">从完整练习库选择…</option>${library.map((item,index) => `<option value="${index}">${escapeHtml(item.title)}</option>`).join("")}`;
       list.innerHTML = items.map((item, index) => `<div class="plan-editor-row" data-plan-editor-index="${index}" data-source-index="${index}">
         <div class="plan-editor-fields"><input data-plan-field="title" value="${escapeHtml(item.title)}" placeholder="练习名称"><textarea data-plan-field="translation" placeholder="练习说明">${escapeHtml(item.translation || "")}</textarea><textarea class="plan-editor-tasks" data-plan-field="tasks" placeholder="每行一个注意要点">${escapeHtml((item.tasks || []).join("\n"))}</textarea></div>
         <input class="plan-editor-minutes" data-plan-field="minutes" type="number" min="0" step="5" value="${Number(item.minutes || 0)}" aria-label="目标分钟数">
@@ -1073,6 +1091,18 @@
       row.querySelector("[data-plan-remove]").addEventListener("click", () => row.remove()); list.appendChild(row); row.querySelector("[data-plan-field=title]").focus();
       row.querySelector("[data-plan-up]").addEventListener("click", () => { if(row.previousElementSibling) list.insertBefore(row,row.previousElementSibling); });
       row.querySelector("[data-plan-down]").addEventListener("click", () => { if(row.nextElementSibling) list.insertBefore(row.nextElementSibling,row); });
+    });
+    document.getElementById("addFromPlanLibrary").addEventListener("click", () => {
+      const select = document.getElementById("planLibrarySelect");
+      if (select.value === "") return;
+      const item = mergePlans(plans.A, plans.B)[Number(select.value)];
+      if (!item) return;
+      const list = document.getElementById("planEditorList");
+      const existing = [...list.querySelectorAll('[data-plan-field="title"]')].some(input => input.value.trim() === item.title);
+      if (existing) return showToast("这项已经在今日练习中");
+      const row = document.createElement("div"); row.className="plan-editor-row"; row.dataset.planEditorIndex=list.children.length; row.dataset.sourceIndex="-1";
+      row.innerHTML=`<div class="plan-editor-fields"><input data-plan-field="title" value="${escapeHtml(item.title)}"><textarea data-plan-field="translation">${escapeHtml(item.translation || "")}</textarea><textarea class="plan-editor-tasks" data-plan-field="tasks">${escapeHtml((item.tasks || []).join("\n"))}</textarea></div><input class="plan-editor-minutes" data-plan-field="minutes" type="number" min="0" step="5" value="${Number(item.minutes || 0)}"><div><button class="small-btn" data-plan-up type="button">↑</button><button class="small-btn" data-plan-down type="button">↓</button><button class="small-btn plan-editor-remove" data-plan-remove type="button">删除</button></div>`;
+      row.querySelector("[data-plan-remove]").addEventListener("click",()=>row.remove()); row.querySelector("[data-plan-up]").addEventListener("click",()=>{if(row.previousElementSibling)list.insertBefore(row,row.previousElementSibling)}); row.querySelector("[data-plan-down]").addEventListener("click",()=>{if(row.nextElementSibling)list.insertBefore(row.nextElementSibling,row)}); list.appendChild(row); select.value="";
     });
     document.getElementById("savePlanEdit").addEventListener("click", savePlanEditor);
     document.getElementById("previousMonth").addEventListener("click", () => {

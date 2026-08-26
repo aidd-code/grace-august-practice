@@ -511,7 +511,7 @@
     const STORAGE_KEY = "grace-practice-2026-08-v1";
     const PRACTICE_CONTENT_VERSION = 3;
     const UNIFIED_PLAN_START = "2026-08-26";
-    const UNIFIED_PLAN_VERSION = 5;
+    const UNIFIED_PLAN_VERSION = 6;
     const PAGANINI_CHANGE_EFFECTIVE = "2026-08-18";
     const PAGANINI_PREVIOUS_CONTENT = {
       "帕格尼尼第 5 号随想曲": {
@@ -606,7 +606,10 @@
       const previous = addDays(day, -1);
       const priorUnified = getPlanDay(previous, "U", false)?.planSnapshot;
       if (priorUnified?.length) return clonePlan(priorUnified);
-      return clonePlan(planItems(previous, defaultPlanType(previous)));
+      const source = getPlanDay(previous, defaultPlanType(previous), false);
+      const sourceItems = planItems(previous, defaultPlanType(previous));
+      const active = sourceItems.filter((item, index) => hasMeaningfulItemData(source?.items?.[index]));
+      return active.length ? clonePlan(active) : clonePlan(sourceItems);
     }
     function baselineUnifiedPlan(day) {
       if (day === UNIFIED_PLAN_START) return yesterdayPlan(day);

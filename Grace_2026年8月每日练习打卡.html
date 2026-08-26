@@ -955,7 +955,7 @@
     function renderPlanEditor() {
       const list = document.getElementById("planEditorList");
       const items = ensurePlanSnapshot(selectedDay, "U");
-      list.innerHTML = items.map((item, index) => `<div class="plan-editor-row" data-plan-editor-index="${index}">
+      list.innerHTML = items.map((item, index) => `<div class="plan-editor-row" data-plan-editor-index="${index}" data-source-index="${index}">
         <div class="plan-editor-fields"><input data-plan-field="title" value="${escapeHtml(item.title)}" placeholder="练习名称"><textarea data-plan-field="translation" placeholder="练习说明">${escapeHtml(item.translation || "")}</textarea><textarea class="plan-editor-tasks" data-plan-field="tasks" placeholder="每行一个注意要点">${escapeHtml((item.tasks || []).join("\n"))}</textarea></div>
         <input class="plan-editor-minutes" data-plan-field="minutes" type="number" min="0" step="5" value="${Number(item.minutes || 0)}" aria-label="目标分钟数">
         <div><button class="small-btn" data-plan-up type="button">↑</button><button class="small-btn" data-plan-down type="button">↓</button><button class="small-btn plan-editor-remove" data-plan-remove type="button">删除</button></div>
@@ -970,8 +970,9 @@
       return [...document.querySelectorAll("#planEditorList [data-plan-editor-index]")].map(row => {
         const field = name => row.querySelector(`[data-plan-field="${name}"]`).value;
         const title = field("title").trim();
-        const original = ensurePlanSnapshot(selectedDay, "U").find(item => item.title === title) || {};
-        return {...original, title, minutes:Math.max(0, Number(field("minutes")) || 0), translation:field("translation").trim(), tasks:field("tasks").split("\n").map(value => value.trim()).filter(Boolean)};
+        const sourceIndex = Number(row.dataset.sourceIndex);
+        const original = sourceIndex >= 0 ? ensurePlanSnapshot(selectedDay, "U")[sourceIndex] || {} : {};
+        return {...original, _sourceIndex:sourceIndex, title, minutes:Math.max(0, Number(field("minutes")) || 0), translation:field("translation").trim(), tasks:field("tasks").split("\n").map(value => value.trim()).filter(Boolean)};
       }).filter(item => item.title);
     }
     function openPlanEditor() {
@@ -991,7 +992,8 @@
       const oldScores = previous;
       const nextRecords = {};
       items.forEach((item, index) => {
-        const oldIndex = previous.findIndex(candidate => candidate.title === item.title);
+        const oldIndex = item._sourceIndex;
+        delete item._sourceIndex;
         if (oldIndex >= 0 && oldRecords[oldIndex]) nextRecords[index] = oldRecords[oldIndex];
         if (oldIndex >= 0 && oldScores[oldIndex]?.scoreFiles) items[index].scoreFiles = oldScores[oldIndex].scoreFiles;
       });
@@ -1066,7 +1068,7 @@
     document.getElementById("planModal").addEventListener("click", event => { if (event.target.id === "planModal") closePlanEditor(); });
     document.getElementById("addPlanItem").addEventListener("click", () => {
       const list = document.getElementById("planEditorList");
-      const row = document.createElement("div"); row.className = "plan-editor-row"; row.dataset.planEditorIndex = list.children.length;
+      const row = document.createElement("div"); row.className = "plan-editor-row"; row.dataset.planEditorIndex = list.children.length; row.dataset.sourceIndex = "-1";
       row.innerHTML = `<div class="plan-editor-fields"><input data-plan-field="title" placeholder="练习名称"><textarea data-plan-field="translation" placeholder="练习说明"></textarea><textarea class="plan-editor-tasks" data-plan-field="tasks" placeholder="每行一个注意要点"></textarea></div><input class="plan-editor-minutes" data-plan-field="minutes" type="number" min="0" step="5" value="30" aria-label="目标分钟数"><div><button class="small-btn" data-plan-up type="button">↑</button><button class="small-btn" data-plan-down type="button">↓</button><button class="small-btn plan-editor-remove" data-plan-remove type="button">删除</button></div>`;
       row.querySelector("[data-plan-remove]").addEventListener("click", () => row.remove()); list.appendChild(row); row.querySelector("[data-plan-field=title]").focus();
       row.querySelector("[data-plan-up]").addEventListener("click", () => { if(row.previousElementSibling) list.insertBefore(row,row.previousElementSibling); });

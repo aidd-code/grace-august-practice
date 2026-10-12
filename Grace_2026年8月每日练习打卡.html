@@ -1028,7 +1028,7 @@
     function renderPlanEditor() {
       const list = document.getElementById("planEditorList");
       const items = ensurePlanSnapshot(selectedDay, "U");
-      const library = mergePlans(plans.A, plans.B);
+      const library = NEW_UNIFIED_TEMPLATE;
       document.getElementById("planLibrarySelect").innerHTML = `<option value="">从完整练习库选择…</option>${library.map((item,index) => `<option value="${index}">${escapeHtml(item.title)}</option>`).join("")}`;
       list.innerHTML = items.map((item, index) => `<div class="plan-editor-row" data-plan-editor-index="${index}" data-source-index="${index}">
         <div class="plan-editor-fields"><input data-plan-field="title" value="${escapeHtml(item.title)}" placeholder="练习名称"><textarea data-plan-field="translation" placeholder="练习说明">${escapeHtml(item.translation || "")}</textarea><textarea class="plan-editor-tasks" data-plan-field="tasks" placeholder="每行一个注意要点">${escapeHtml((item.tasks || []).join("\n"))}</textarea></div>
@@ -1152,7 +1152,7 @@
     document.getElementById("addFromPlanLibrary").addEventListener("click", () => {
       const select = document.getElementById("planLibrarySelect");
       if (select.value === "") return;
-      const item = mergePlans(plans.A, plans.B)[Number(select.value)];
+      const item = NEW_UNIFIED_TEMPLATE[Number(select.value)];
       if (!item) return;
       const list = document.getElementById("planEditorList");
       const existing = [...list.querySelectorAll('[data-plan-field="title"]')].some(input => input.value.trim() === item.title);

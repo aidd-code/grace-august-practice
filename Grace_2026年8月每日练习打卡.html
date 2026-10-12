@@ -143,6 +143,27 @@
     .readonly-note{display:none;margin:0;padding:10px 16px;color:#756d7d;background:#f7f3f7;font-size:13px;text-align:center}
     body.read-only .readonly-note{display:block}
     .field-save-hint{margin:7px 2px 0;color:var(--muted);font-size:12px}
+    .feedback-box{margin:18px 0 8px;padding:15px 16px;border:1px solid #e5dce9;border-radius:16px;background:#fbf8fc}
+    .feedback-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;color:var(--purple-dark);font-size:14px;font-weight:850}
+    .feedback-subtitle{margin:0 0 9px;color:var(--muted);font-size:12px}
+    .feedback-statuses,.feedback-tags{display:flex;flex-wrap:wrap;gap:7px}
+    .feedback-choice{min-height:34px;padding:0 11px;border:1px solid #e1d7e7;border-radius:999px;color:var(--purple-dark);background:white;font-size:12px;font-weight:750;cursor:pointer}
+    .feedback-choice.active{border-color:var(--purple);color:white;background:var(--purple)}
+    .feedback-tag.active{border-color:var(--peach);color:#7b4a3b;background:#fff0e9}
+    .voice-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:11px}
+    .voice-status{color:var(--muted);font-size:12px}
+    .voice-player{width:100%;height:34px;margin-top:8px}
+    .feedback-note{margin:9px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+    .discovery-panel{margin:18px 30px;padding:18px;border:1px solid #d8dfe7;border-radius:18px;background:#f0f5fa}
+    .discovery-panel h3{margin:0 0 7px;color:var(--purple-dark);font-size:18px}
+    .discovery-panel textarea,.feedback-box textarea{min-height:68px;margin-top:9px}
+    .teacher-box{background:#fff6df;border-color:#eee0b7}
+    .yesterday-list{display:grid;gap:9px;margin:12px 0}
+    .yesterday-entry{padding:12px;border-radius:12px;background:white;line-height:1.6;overflow-wrap:anywhere}
+    .feedback-photo{display:block;max-width:100%;max-height:240px;margin-top:10px;border-radius:12px;object-fit:contain}
+    .discovery-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .feedback-badge{display:inline-block;margin:5px 0 0;color:var(--purple);font-size:12px}
+    @media(max-width:600px){.discovery-panel{margin:14px 18px;padding:15px}}
 
     .practice-list { padding: 6px 30px 30px; }
     .practice-card { border-bottom: 1px solid var(--line); }
@@ -360,6 +381,8 @@
       </div>
       <div class="readonly-note">当前是只读浏览模式。输入密码登录后，才可以填写、打卡、计时和管理乐谱。</div>
 
+      <section class="discovery-panel" id="discoveryPanel" aria-label="今日发现与昨天的提醒"></section>
+
       <div class="practice-list" id="practiceList"></div>
 
       <section class="journal">
@@ -552,6 +575,9 @@
     let activeTimer = null;
     let timerTick = null;
     let allOpen = false;
+    let voiceSession = null;
+    const FEEDBACK_STATUSES = ["顺利", "有问题", "有新发现", "明天继续"];
+    const FEEDBACK_TAGS = ["音准", "节奏", "动作", "音色", "换把", "弓法"];
 
     function defaultState() { return { days: {}, typeOverrides: {} }; }
     function loadState() {
@@ -559,8 +585,10 @@
       catch { return defaultState(); }
     }
     function saveState() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+      catch { showToast("本机空间不足，请先导出备份；本次修改仍尝试同步云端"); }
       window.dispatchEvent(new CustomEvent("grace:practice-state-changed", {detail:{state}}));
+      updateFeedbackProgress();
     }
     function parseDateKey(key) {
       const [year, month, day] = key.split("-").map(Number);
@@ -673,7 +701,8 @@
     }
     function hasMeaningfulItemData(item = {}) {
       return item.done || item.seconds > 0 || String(item.note || "").trim() ||
-        String(item.answer || "").trim() || Object.values(item.checks || {}).some(Boolean);
+        String(item.answer || "").trim() || Object.values(item.checks || {}).some(Boolean) ||
+        item.status || item.tags?.length || item.teacherNote || item.discovery || item.voiceData || item.photoData;
     }
     function hasMeaningfulDayData(dayData = {}) {
       const hasItems = Object.values(dayData.items || {}).some(hasMeaningfulItemData);
@@ -688,6 +717,10 @@
       if (!String(target.note || "").trim()) target.note = source.note || "";
       else if (String(source.note || "").trim() && target.note !== source.note) target.note = `${target.note}\n${source.note}`;
       if (!String(target.answer || "").trim()) target.answer = source.answer || "";
+      for (const field of ["status","teacherNote","discovery","voiceData","voiceMime","voiceDuration","photoData"]) {
+        if (!target[field] && source[field]) target[field] = source[field];
+      }
+      target.tags = [...new Set([...(target.tags || []), ...(source.tags || [])])];
       return target;
     }
     function migrateUnifiedPlans(targetState) {
@@ -821,7 +854,8 @@
       const visibleTypes = isUnifiedDay(day) ? ["U"] : ["A", "B"];
       const recorded = visibleTypes.filter(type => byType[type].hasRecord);
       const label = recorded.map(type => `${type} ${byType[type].percent ? `${byType[type].percent}%` : "已记录"}`).join(" · ");
-      return {byType, hasRecord:recorded.length > 0, complete:recorded.length > 0 && recorded.every(type => byType[type].percent === 100), label};
+      const feedbackCount = visibleTypes.reduce((sum, type) => sum + feedbackProgress(day, type).count, 0);
+      return {byType, hasRecord:recorded.length > 0, complete:recorded.length > 0 && recorded.every(type => byType[type].percent === 100), label:label + (feedbackCount ? " · 有发现" : "")};
     }
     function initialPlanType(day) {
       if (isUnifiedDay(day)) return "U";
@@ -881,6 +915,7 @@
       document.getElementById("typeB").textContent = dateRecord.byType.B.hasRecord ? `B 日 · ${dateRecord.byType.B.percent}%` : "B 日";
       renderItems();
       renderJournal();
+      renderDiscoveryPanel();
     }
 
     window.gracePlans = plans;
@@ -890,6 +925,7 @@
     window.graceGetPracticeState = () => JSON.parse(JSON.stringify(state));
     window.graceApplyPracticeState = cloudState => {
       if (!cloudState?.days || !cloudState?.typeOverrides) return false;
+      if (voiceSession) return false;
       stopTimer();
       state = cloudState;
       const migrated = migrateDailyPlans(state);
@@ -900,10 +936,195 @@
       return true;
     };
     window.addEventListener("grace:auth-changed", () => {
+      if (!window.graceIsLoggedIn?.()) stopVoiceRecording(true);
       renderCalendar();
       renderDay();
     });
 
+    function feedbackProgress(day = selectedDay, type = selectedType) {
+      const planDay = getPlanDay(day, type, false) || {};
+      const records = Object.values(planDay.items || {});
+      const statuses = records.filter(item => item.status).length;
+      const discoveries = records.filter(item => String(item.discovery || "").trim() || item.voiceData || item.photoData).length;
+      const journal = planDay.journal || {};
+      const daily = Boolean(String(journal.discovery || "").trim() || journal.voiceData || journal.photoData);
+      return {statuses, count:discoveries + Number(daily)};
+    }
+    function updateFeedbackProgress() {
+      const box = document.getElementById("feedbackProgress");
+      if (!box) return;
+      const progress = feedbackProgress();
+      box.textContent = `已选 ${progress.statuses} 个状态 · 留下 ${progress.count} 条发现`;
+      document.getElementById("discoveryEncouragement").textContent = progress.count
+        ? "已经给明天的自己留下线索了。想补充时再回来。"
+        : "不必每项都写，选一件今天值得记住的事就好。";
+    }
+    function feedbackMedia(data) {
+      const audio = /^data:audio\/[a-zA-Z0-9.+-]+(?:;[^,]*)?;base64,[a-zA-Z0-9+/=]+$/.test(data.voiceData || "")
+        ? `<audio class="voice-player" controls preload="metadata" src="${escapeHtml(data.voiceData)}"></audio>` : "";
+      const photo = /^data:image\/(?:jpeg|png|webp);base64,[a-zA-Z0-9+/=]+$/.test(data.photoData || "")
+        ? `<img class="feedback-photo" src="${escapeHtml(data.photoData)}" alt="本日练习发现的谱面标记">` : "";
+      return audio + photo;
+    }
+    function feedbackTarget(index, day = selectedDay, type = selectedType) {
+      return index === "daily" ? getPlanDay(day, type).journal : getItem(day, index, true, type);
+    }
+    function feedbackRoot(index) {
+      return index === "daily" ? document.getElementById("discoveryPanel") : document.querySelector(`.practice-card[data-index="${index}"]`);
+    }
+    function refreshFeedbackCard(index) {
+      const root = feedbackRoot(index);
+      if (!root) return;
+      const data = feedbackTarget(index);
+      if (index !== "daily") {
+        root.querySelectorAll("[data-feedback-status]").forEach(button => {
+          const active = button.dataset.feedbackStatus === data.status;
+          button.classList.toggle("active", active); button.setAttribute("aria-pressed", active);
+        });
+        root.querySelectorAll("[data-feedback-tag]").forEach(button => {
+          const active = Boolean(data.tags?.includes(button.dataset.feedbackTag));
+          button.classList.toggle("active", active); button.setAttribute("aria-pressed", active);
+        });
+        root.querySelector(".feedback-title span:last-child").textContent = data.status || "还没有记录";
+        root.querySelector("[data-feedback-badge]").textContent = `${data.status || ""}${data.discovery || data.voiceData || data.photoData ? " · 已留发现" : ""}${data.teacherNote ? " · 有老师提醒" : ""}`;
+      }
+      const media = root.querySelector("[data-media-preview]");
+      if (media.innerHTML !== feedbackMedia(data)) media.innerHTML = feedbackMedia(data);
+      const recording = voiceSession && voiceSession.day === selectedDay && voiceSession.type === selectedType && voiceSession.index === index;
+      root.querySelector("[data-voice-record]").textContent = recording ? "停止并保存" : data.voiceData ? "重新录音" : "录一段语音";
+      root.querySelector("[data-voice-delete]").style.display = data.voiceData ? "" : "none";
+      root.querySelector("[data-voice-status]").textContent = recording ? "正在录音…" : data.voiceData ? `已录音 · ${data.voiceDuration || 0}秒` : "建议 10–30 秒，最多 30 秒";
+      root.querySelector("[data-photo-delete]").hidden = !data.photoData;
+    }
+    function renderDiscoveryPanel() {
+      const previous = addDays(selectedDay, -1);
+      const previousTypes = isUnifiedDay(previous) ? ["U"] : ["A", "B"];
+      const reminders = [];
+      for (const type of previousTypes) {
+        const planDay = getPlanDay(previous, type, false);
+        if (!planDay) continue;
+        const items = planItems(previous, type);
+        Object.entries(planDay.items || {}).forEach(([index, data]) => {
+          if (!data.discovery && !data.note && !data.teacherNote && !data.voiceData && !data.photoData && !["有问题","明天继续"].includes(data.status)) return;
+          reminders.push(`<div class="yesterday-entry"><strong>${escapeHtml(items[index]?.title || "练习记录")}</strong>${data.status ? ` · ${escapeHtml(data.status)}` : ""}${data.teacherNote ? `<div>老师提醒：${escapeHtml(data.teacherNote)}</div>` : ""}${data.discovery || data.note ? `<div>${escapeHtml(data.discovery || data.note)}</div>` : ""}${data.tags?.length ? `<small>${escapeHtml(data.tags.join(" · "))}</small>` : ""}${feedbackMedia(data)}</div>`);
+        });
+        const journal = planDay.journal || {};
+        if (journal.discovery || journal.next || journal.voiceData || journal.photoData) reminders.push(`<div class="yesterday-entry"><strong>昨天留给自己的话</strong><div>${escapeHtml(journal.discovery || journal.next || "")}</div>${feedbackMedia(journal)}</div>`);
+      }
+      const data = getPlanDay(selectedDay, selectedType, false)?.journal || {};
+      document.getElementById("discoveryPanel").innerHTML = `<h3>给明天的自己留一个发现</h3><p class="feedback-subtitle" id="discoveryEncouragement"></p><div class="feedback-title" id="feedbackProgress" role="status"></div>${reminders.length ? `<details><summary>昨天留下的线索（${reminders.length} 条） · 点开听听 / 看看</summary><div class="yesterday-list">${reminders.join("")}</div></details>` : `<p class="feedback-subtitle">昨天还没有留下发现。今天可以从一句话开始。</p>`}<label for="dailyDiscovery" class="feedback-title" style="margin-top:14px">今日最重要发现 · 写一句或录一段，任选</label><textarea id="dailyDiscovery" placeholder="今天哪个声音最好听？哪一个动作突然变容易了？">${escapeHtml(data.discovery || "")}</textarea><div class="voice-row"><button class="small-btn edit-only" data-voice-record type="button">${data.voiceData ? "重新录音" : "录一段语音"}</button><button class="small-btn edit-only" data-voice-delete type="button" style="display:${data.voiceData ? "" : "none"}">删除语音</button><span class="voice-status" data-voice-status>${data.voiceData ? `已录音 · ${data.voiceDuration || 0}秒` : "建议 10–30 秒"}</span></div><div data-media-preview>${feedbackMedia(data)}</div><div class="discovery-actions"><button class="small-btn edit-only" data-photo-add type="button">拍照 / 添加谱面标记</button><button class="small-btn edit-only" data-photo-delete type="button" ${data.photoData ? "" : "hidden"}>删除图片</button><input data-photo-input type="file" accept="image/jpeg,image/png,image/webp" hidden></div><p class="field-save-hint">登录后自动保存到当前日期。下次练习时，这些发现会成为昨天的线索。</p>`;
+      const root = feedbackRoot("daily");
+      root.querySelector("textarea").readOnly = !window.graceIsLoggedIn?.();
+      root.querySelector("textarea").addEventListener("input", event => {
+        if (!window.graceIsLoggedIn?.()) return;
+        ensurePlanSnapshot(selectedDay); feedbackTarget("daily").discovery = event.target.value;
+        saveState(); renderCalendar();
+      });
+      root.querySelector("[data-voice-record]").addEventListener("click", () => startVoiceRecording("daily"));
+      root.querySelector("[data-voice-delete]").addEventListener("click", () => {
+        if (!window.graceRequireLogin?.()) return;
+        if (voiceSession) return showToast("请先结束当前录音");
+        const data = feedbackTarget("daily"); delete data.voiceData; delete data.voiceDuration; delete data.voiceMime;
+        saveState(); refreshFeedbackCard("daily"); renderCalendar();
+      });
+      root.querySelector("[data-photo-add]").addEventListener("click", () => { if (window.graceRequireLogin?.()) root.querySelector("[data-photo-input]").click(); });
+      root.querySelector("[data-photo-input]").addEventListener("change", event => attachFeedbackPhoto("daily", event.target.files[0]));
+      root.querySelector("[data-photo-delete]").addEventListener("click", () => {
+        if (!window.graceRequireLogin?.()) return;
+        delete feedbackTarget("daily").photoData; saveState(); refreshFeedbackCard("daily"); renderCalendar();
+      });
+      updateFeedbackProgress();
+      refreshFeedbackCard("daily");
+    }
+    function canStoreFeedbackMedia(dataUrl, oldDataUrl = "") {
+      // Keep small clips/photos out of quota trouble: reserve space for text and backups.
+      const projected = JSON.stringify(state).length - oldDataUrl.length + dataUrl.length;
+      return dataUrl.length <= 700000 && projected < 1800000;
+    }
+    function readDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob);
+      });
+    }
+    function stopVoiceRecording(discard = false) {
+      if (!voiceSession) return;
+      voiceSession.discard ||= discard;
+      clearInterval(voiceSession.tick);
+      if (voiceSession.recorder?.state === "recording") voiceSession.recorder.stop();
+    }
+    async function startVoiceRecording(index) {
+      if (!window.graceRequireLogin?.()) return;
+      if (voiceSession) {
+        if (voiceSession.index === index && voiceSession.day === selectedDay && voiceSession.type === selectedType) stopVoiceRecording();
+        else showToast("请先结束当前录音");
+        return;
+      }
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return showToast("此浏览器无法录音，请用 HTTPS 网站的 Safari 或 Chrome 打开");
+      const session = {index, day:selectedDay, type:selectedType, pending:true, discard:false};
+      voiceSession = session;
+      feedbackRoot(index).querySelector("[data-voice-status]").textContent = "正在请求麦克风权限…";
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        session.stream = stream;
+        if (session.discard || !window.graceIsLoggedIn?.() || session.day !== selectedDay || session.type !== selectedType) {
+          stream.getTracks().forEach(track => track.stop()); voiceSession = null; return;
+        }
+        ensurePlanSnapshot(session.day, session.type);
+        session.target = feedbackTarget(index, session.day, session.type);
+        const mime = ["audio/webm;codecs=opus","audio/mp4","audio/ogg;codecs=opus"].find(type => MediaRecorder.isTypeSupported(type));
+        session.recorder = new MediaRecorder(stream, {audioBitsPerSecond:32000, ...(mime ? {mimeType:mime} : {})});
+        session.chunks = []; session.started = Date.now(); session.pending = false;
+        session.recorder.ondataavailable = event => { if (event.data.size) session.chunks.push(event.data); };
+        session.recorder.onerror = () => { session.discard = true; stopVoiceRecording(true); showToast("录音失败，请重试"); };
+        session.recorder.onstop = async () => {
+          clearInterval(session.tick); stream.getTracks().forEach(track => track.stop());
+          try {
+            if (session.discard) return;
+            const blob = new Blob(session.chunks, {type:session.recorder.mimeType || "audio/webm"});
+            if (!blob.size) throw new Error("未录到声音，请重试");
+            const dataUrl = await readDataUrl(blob);
+            if (!canStoreFeedbackMedia(dataUrl, session.target.voiceData || "")) throw new Error("录音空间不足，请先导出备份或改用文字记录");
+            if (!window.graceIsLoggedIn?.()) return;
+            session.target.voiceData = dataUrl; session.target.voiceMime = blob.type;
+            session.target.voiceDuration = Math.min(30, Math.max(1, Math.round((Date.now() - session.started) / 1000)));
+            saveState(); renderCalendar(); showToast("语音已保存到本机，正在同步云端");
+          } catch (error) { showToast(error.message || "语音未保存，请重试"); }
+          finally { if (voiceSession === session) voiceSession = null; refreshFeedbackCard(index); }
+        };
+        session.recorder.start(); refreshFeedbackCard(index);
+        session.tick = setInterval(() => {
+          const seconds = Math.floor((Date.now() - session.started) / 1000);
+          const root = feedbackRoot(index);
+          if (session.day === selectedDay && session.type === selectedType && root) root.querySelector("[data-voice-status]").textContent = `正在录音 ${seconds} / 30 秒`;
+          if (seconds >= 30) stopVoiceRecording();
+        }, 250);
+      } catch (error) {
+        session.stream?.getTracks().forEach(track => track.stop());
+        if (voiceSession === session) voiceSession = null;
+        refreshFeedbackCard(index);
+        showToast(error.name === "NotAllowedError" ? "麦克风未授权，可以先写一句话" : "麦克风暂不可用，可以先写一句话");
+      }
+    }
+    async function attachFeedbackPhoto(index, file) {
+      if (!file || !window.graceRequireLogin?.()) return;
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 10 * 1024 * 1024) return showToast("请选择 10 MB 以内的 JPG、PNG 或 WebP 图片");
+      const day = selectedDay, type = selectedType;
+      ensurePlanSnapshot(day, type); const target = feedbackTarget(index, day, type);
+      const url = URL.createObjectURL(file);
+      try {
+        const picture = new Image(); picture.src = url; await picture.decode();
+        const scale = Math.min(1, 1100 / Math.max(picture.width, picture.height));
+        const canvas = document.createElement("canvas"); canvas.width = Math.round(picture.width * scale); canvas.height = Math.round(picture.height * scale);
+        const context = canvas.getContext("2d"); context.fillStyle = "white"; context.fillRect(0,0,canvas.width,canvas.height); context.drawImage(picture,0,0,canvas.width,canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        if (!canStoreFeedbackMedia(dataUrl, target.photoData || "")) throw new Error("图片记录空间不足，请先导出备份或改用文字记录");
+        if (!window.graceIsLoggedIn?.()) return;
+        target.photoData = dataUrl; saveState(); renderCalendar();
+        if (day === selectedDay && type === selectedType) refreshFeedbackCard(index);
+        showToast("谱面标记已保存，正在同步云端");
+      } catch (error) { showToast(error.message || "图片无法读取，请换成 JPG 或 PNG"); }
+      finally { URL.revokeObjectURL(url); }
+    }
     function renderItems() {
       const type = selectedType;
       const dayItems = planItems(selectedDay, type);
@@ -918,7 +1139,7 @@
         return `<article class="practice-card ${data.done ? "done" : ""} ${itemOpen ? "open" : ""}" data-index="${i}">
           <button class="card-summary" type="button" aria-expanded="${itemOpen}">
             <span class="check" role="checkbox" aria-checked="${data.done}">${data.done ? "✓" : ""}</span>
-            <span><span class="number">练习 ${String(i+1).padStart(2,"0")}</span><span class="card-title">${escapeHtml(item.title)}</span><span class="card-meta">目标 · ${targetText(item)}</span></span>
+            <span><span class="number">练习 ${String(i+1).padStart(2,"0")}</span><span class="card-title">${escapeHtml(item.title)}</span><span class="card-meta">目标 · ${targetText(item)}</span><span class="feedback-badge" data-feedback-badge>${escapeHtml(data.status || "")}${data.discovery || data.voiceData || data.photoData ? " · 已留发现" : ""}${data.teacherNote ? " · 有老师提醒" : ""}</span></span>
             <span class="time-pill">${data.seconds ? formatClock(data.seconds) : targetText(item)}</span><span class="chevron">⌄</span>
           </button>
           <div class="card-body">
@@ -929,12 +1150,27 @@
               <span class="practice-score-meta">${hasScore ? `已关联 · ${scoreCount} 个文件${item.scorePages ? ` · 共 ${item.scorePages} 页` : ""}` : "尚未上传 · 可一次选择多个文件"}</span>
             </div>
             <p class="translation">${escapeHtml(item.translation)}</p>
+            <div class="feedback-box teacher-box"><label class="feedback-title" for="teacher-${i}">老师提醒</label><textarea id="teacher-${i}" data-field="teacherNote" placeholder="老师最希望今天注意的一件事……">${escapeHtml(data.teacherNote || "")}</textarea><p class="feedback-note">登录后双方都可以填写；每天的提醒独立保留。</p></div>
             <h4 class="focus-title">今天要注意</h4>
             <div class="task-checks">${checks}</div>
+            <div class="feedback-box">
+              <div class="feedback-title"><span>今天的练习反馈</span><span style="font-size:12px;color:var(--muted)">${data.status ? escapeHtml(data.status) : "还没有记录"}</span></div>
+              <p class="feedback-subtitle">先选一个最接近的状态，再决定要不要补充文字或语音。</p>
+              <div class="feedback-statuses">${FEEDBACK_STATUSES.map(status => `<button class="feedback-choice ${data.status === status ? "active" : ""}" aria-pressed="${data.status === status}" data-feedback-status="${status}" type="button">${status}</button>`).join("")}</div>
+              <p class="feedback-subtitle" style="margin-top:13px">可以选几个关键词：</p>
+              <div class="feedback-tags">${FEEDBACK_TAGS.map(tag => `<button class="feedback-choice feedback-tag ${data.tags?.includes(tag) ? "active" : ""}" aria-pressed="${Boolean(data.tags?.includes(tag))}" data-feedback-tag="${tag}" type="button">${tag}</button>`).join("")}</div>
+              <label class="feedback-title" style="margin-top:14px" for="discovery-${i}">今天的发现 · 给明天的自己留一句话</label>
+              <textarea id="discovery-${i}" data-field="discovery" placeholder="哪个动作变容易了？哪一处还想再试一次？一句话就好。">${escapeHtml(data.discovery || "")}</textarea>
+              <div class="voice-row"><button class="small-btn edit-only" data-voice-record type="button">${data.voiceData ? "重新录音" : "录一段语音"}</button><button class="small-btn edit-only" data-voice-delete type="button" ${data.voiceData ? "" : "style=\"display:none\""}>删除语音</button><span class="voice-status" data-voice-status>${data.voiceData ? `已录音${data.voiceDuration ? ` · ${data.voiceDuration}秒` : ""}` : "可录 10–30 秒"}</span></div>
+              <div data-media-preview>${feedbackMedia(data)}</div>
+              <div class="discovery-actions"><button class="small-btn edit-only" data-photo-add type="button">拍照 / 添加谱面标记</button><button class="small-btn edit-only" data-photo-delete type="button" ${data.photoData ? "" : "hidden"}>删除图片</button><input data-photo-input type="file" accept="image/jpeg,image/png,image/webp" hidden></div>
+              <p class="feedback-note">想记就记，状态、文字、语音或图片任选。语音和图片随本日记录同步到云端；请勿录入隐私信息。</p>
+            </div>
             ${item.question ? `<h4 class="focus-title">想一想，再写下来</h4><p style="line-height:1.65;margin:0 0 10px">${escapeHtml(item.question)}</p><textarea data-field="answer" placeholder="写下 Grace 自己的想法……">${escapeHtml(data.answer)}</textarea>` : ""}
             <h4 class="focus-title">练习计时与笔记</h4>
             <div class="timer-row"><span class="timer-display" data-clock>${formatClock(data.seconds)}</span><button class="timer-btn edit-only" data-timer type="button">开始计时</button><button class="small-btn edit-only" data-add="300" type="button">+5 分钟</button><button class="small-btn edit-only" data-add="-300" type="button">−5 分钟</button></div>
-            <textarea data-field="note" placeholder="老师的提醒、今天发现的问题……" style="margin-top:12px">${escapeHtml(data.note)}</textarea>
+            <label class="focus-title" for="legacy-note-${i}" style="display:block">补充笔记（原有记录保留）</label>
+            <textarea id="legacy-note-${i}" data-field="note" placeholder="其他想记下的事……" style="margin-top:12px">${escapeHtml(data.note)}</textarea>
             <p class="field-save-hint">登录后自动保存：输入时先保存到本机，约 1 秒后同步到云端，无需点击保存。</p>
           </div>
         </article>`;
@@ -964,6 +1200,34 @@
           ensurePlanSnapshot(selectedDay);
           getItem(selectedDay, index).checks[input.dataset.check] = input.checked; saveState();
         }));
+        card.querySelectorAll("[data-feedback-status]").forEach(button => button.addEventListener("click", () => {
+          if (!window.graceRequireLogin?.()) return;
+          ensurePlanSnapshot(selectedDay);
+          getItem(selectedDay, index).status = button.dataset.feedbackStatus;
+          saveState(); refreshFeedbackCard(index); renderCalendar();
+        }));
+        card.querySelectorAll("[data-feedback-tag]").forEach(button => button.addEventListener("click", () => {
+          if (!window.graceRequireLogin?.()) return;
+          ensurePlanSnapshot(selectedDay);
+          const data = getItem(selectedDay, index);
+          data.tags = Array.isArray(data.tags) ? data.tags : [];
+          data.tags = data.tags.includes(button.dataset.feedbackTag) ? data.tags.filter(tag => tag !== button.dataset.feedbackTag) : [...data.tags, button.dataset.feedbackTag];
+          saveState(); refreshFeedbackCard(index); renderCalendar();
+        }));
+        card.querySelector("[data-voice-record]")?.addEventListener("click", () => startVoiceRecording(index));
+        card.querySelector("[data-voice-delete]")?.addEventListener("click", () => {
+          if (!window.graceRequireLogin?.()) return;
+          if (voiceSession) return showToast("请先结束当前录音");
+          ensurePlanSnapshot(selectedDay); const data = getItem(selectedDay, index); delete data.voiceData; delete data.voiceMime; delete data.voiceDuration; saveState(); refreshFeedbackCard(index);
+        });
+        card.querySelector("[data-photo-add]").addEventListener("click", () => {
+          if (window.graceRequireLogin?.()) card.querySelector("[data-photo-input]").click();
+        });
+        card.querySelector("[data-photo-input]").addEventListener("change", event => attachFeedbackPhoto(index, event.target.files[0]));
+        card.querySelector("[data-photo-delete]").addEventListener("click", () => {
+          if (!window.graceRequireLogin?.()) return;
+          delete getItem(selectedDay, index).photoData; saveState(); refreshFeedbackCard(index);
+        });
         card.querySelectorAll("[data-score-card-open]").forEach(button => button.addEventListener("click", event => {
           event.stopPropagation();
           window.openGraceScores?.(item.scoreFiles || [{url:item.scoreUrl, name:item.title}], item.title);
@@ -987,7 +1251,7 @@
         card.querySelectorAll("[data-field]").forEach(field => field.addEventListener("input", () => {
           if (!window.graceIsLoggedIn?.()) return;
           ensurePlanSnapshot(selectedDay);
-          getItem(selectedDay, index)[field.dataset.field] = field.value; saveState();
+          getItem(selectedDay, index)[field.dataset.field] = field.value; saveState(); refreshFeedbackCard(index); renderCalendar();
         }));
         card.querySelectorAll("[data-field]").forEach(field => {
           field.readOnly = !window.graceIsLoggedIn?.();
@@ -1080,8 +1344,9 @@
       showToast("今日完整练习已保存");
     }
 
-    function selectDay(day) { selectedDay = day; selectedType = initialPlanType(day); calendarMonth = day.slice(0, 7); allOpen = false; renderCalendar(); renderDay(); window.scrollTo({top: document.querySelector(".day-panel").offsetTop - 16, behavior:"smooth"}); }
+    function selectDay(day) { stopVoiceRecording(voiceSession?.pending); selectedDay = day; selectedType = initialPlanType(day); calendarMonth = day.slice(0, 7); allOpen = false; renderCalendar(); renderDay(); window.scrollTo({top: document.querySelector(".day-panel").offsetTop - 16, behavior:"smooth"}); }
     function setType(type) {
+      stopVoiceRecording(voiceSession?.pending);
       stopTimer();
       selectedType = type;
       allOpen = false;
@@ -1095,6 +1360,12 @@
       renderCalendar(); renderDay();
       openIndexes.forEach(i => document.querySelector(`.practice-card[data-index="${i}"]`)?.classList.add("open"));
       if (data.done) showToast("完成一项，真棒！");
+      if (data.done && !data.status) {
+        const card = document.querySelector(`.practice-card[data-index="${index}"]`);
+        card?.classList.add("open");
+        card?.querySelector(".card-summary").setAttribute("aria-expanded", "true");
+        showToast("完成了！愿意给这次练习选一个状态吗？");
+      }
     }
     function toggleTimer(index) {
       if (activeTimer === index) { stopTimer(); updateTimerButtons(); return; }
@@ -1208,8 +1479,8 @@
       };
       reader.readAsText(file);
     });
-    document.addEventListener("visibilitychange", () => { if (document.hidden) stopTimer(); });
-    window.addEventListener("beforeunload", saveState);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) { stopTimer(); stopVoiceRecording(voiceSession?.pending); } });
+    window.addEventListener("beforeunload", () => { stopVoiceRecording(true); saveState(); });
     document.getElementById("cloudSaveRetry").addEventListener("click", () => window.dispatchEvent(new Event("grace:practice-save-retry")));
 
     renderCalendar();

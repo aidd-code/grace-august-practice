@@ -2,7 +2,8 @@
   "use strict";
   const base = "https://vtykowjeuwrplrzzprnz.supabase.co";
   const key = "sb_publishable_WF5o9sLcoRuur5eIvL-J-g_qt350-ye";
-  const headers = {apikey:key, Authorization:"Bearer " + key};
+  // A publishable key is an API key, not an Auth access-token JWT.
+  const headers = {apikey:key};
   const recordId = "grace-2026-08";
   const outboxKey = "grace-practice-sync-outbox-v2";
   const recoveryKey = "grace-practice-before-sync-v2";
@@ -134,15 +135,28 @@
           target.items ||= {};
           for (const [index, item] of Object.entries(plan.items || {})) {
             if (!Object.hasOwn(target.items, index) && meaningful(item)) target.items[index] = clone(item);
+            else if (isObject(target.items[index]) && isObject(item)) {
+              // Rendering an unpractised day can create empty item objects in
+              // cloud. They must not prevent recovery of local-only notes and
+              // ticks; existing substantive cloud values still take priority.
+              recoverBlankFields(target.items[index], item);
+            }
           }
         }
         target.journal ||= {};
         for (const [name, value] of Object.entries(plan.journal || {})) {
-          if (!Object.hasOwn(target.journal, name) && meaningful(value)) target.journal[name] = clone(value);
+          if (!meaningful(target.journal[name]) && meaningful(value)) target.journal[name] = clone(value);
         }
       }
     }
     return merged;
+  }
+  function recoverBlankFields(target, local) {
+    for (const [name, value] of Object.entries(local)) {
+      if (["__proto__", "prototype", "constructor"].includes(name)) continue;
+      if (isObject(target[name]) && isObject(value)) recoverBlankFields(target[name], value);
+      else if (!meaningful(target[name]) && meaningful(value)) target[name] = clone(value);
+    }
   }
   function setStatus(state, message) {
     if (storageWarning) message += " · 本机空间不足，请导出备份后再关闭";
@@ -241,7 +255,21 @@
       else setStatus("saved", "双方记录已同步 · " + time + " · 页面打开时每 5 秒更新");
     } catch (error) {
       console.warn("Practice shared sync failed", error);
-      setStatus("error", pending.size ? "网络或云端连接失败 · 本机修改已保留，联网后重试" : "云端连接失败 · 目前仅显示本机记录，请重试");
+      // Keep the local outbox intact. A missing/paused Supabase project is
+      // different from an ordinary offline moment: every device would be
+      // isolated until the project endpoint is restored.
+      const detail = String(error?.message || "");
+      const projectUnavailable = /Failed to fetch|NetworkError|aborted|SSL|ENOTFOUND|DNS|HTTP 404|HTTP 5\d\d/i.test(detail);
+      let message = projectUnavailable
+        ? (pending.size
+          ? "共享云端暂时不可用 · 本机修改已保留，恢复云端后会自动同步"
+          : "共享云端暂时不可用 · 当前仅显示本机记录")
+        : (pending.size
+          ? "网络或云端连接失败 · 本机修改已保留，联网后重试"
+          : "云端连接失败 · 当前仅显示本机记录，请重试");
+      if (/HTTP (401|403)/.test(detail)) message = "云端权限配置未完成 · 请检查 API 密钥及打卡表访问权限 · 本机记录保留";
+      else if (/PGRST205|42P01/.test(detail)) message = "云端打卡表尚未配置 · 请建立 practice_progress 表 · 本机记录保留";
+      setStatus("error", message);
     }
   }
   function sync() {

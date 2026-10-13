@@ -6,6 +6,11 @@ create table if not exists public.practice_progress (
 
 alter table public.practice_progress enable row level security;
 
+-- Password permissions are enforced by the existing local-login UI. This
+-- grants the public browser API the operations used by that shared page;
+-- a local password is not server-side authentication.
+grant select, insert, update on public.practice_progress to anon, authenticated;
+
 drop policy if exists "Public can read practice progress" on public.practice_progress;
 create policy "Public can read practice progress"
   on public.practice_progress for select to anon, authenticated using (true);

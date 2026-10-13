@@ -99,8 +99,49 @@ function client(api, {state=initial(),loggedIn=true,storage=new Map()}={}) {
   child=client(api,{state:old});await child.fire('DOMContentLoaded');
   assert.equal(getPlan(api.row.state).items[0].note,'cloud current');assert.equal(getPlan(api.row.state).items[1].note,'local only');assert.ok(child.storage.has('grace-practice-before-sync-v2'));
   console.log('PASS missing legacy records recovered with pre-sync backup');
+  api=server();getPlan(api.row.state).items[0]={done:false,seconds:0,checks:{'0':false},note:'',teacherNote:'cloud reminder'};
+  getPlan(api.row.state).journal.discovery='';
+  const localTicks=initial();getPlan(localTicks).items[0]={done:true,seconds:30,checks:{'0':true},note:'local discovery',teacherNote:'outdated reminder'};
+  getPlan(localTicks).journal.discovery='local daily discovery';
+  child=client(api,{state:localTicks});await child.fire('DOMContentLoaded');
+  assert.equal(getPlan(api.row.state).items[0].done,true);assert.equal(getPlan(api.row.state).items[0].checks['0'],true);
+  assert.equal(getPlan(api.row.state).items[0].note,'local discovery');assert.equal(getPlan(api.row.state).items[0].teacherNote,'cloud reminder');
+  assert.equal(getPlan(api.row.state).journal.discovery,'local daily discovery');
+  console.log('PASS blank cloud defaults do not hide pre-existing local-only check-ins');
   // Read-only page can be logged in later without losing its sync session.
   api=server();viewer=client(api,{loggedIn:false});await viewer.fire('DOMContentLoaded');viewer.setLogin(true);await viewer.fire('grace:auth-changed',{detail:{loggedIn:true}});await viewer.runTimers();assert.ok(viewer.status());
   console.log('PASS read-only to logged-in transition');
+  // A logged-out device must read cloud records without performing a write,
+  // even if it has a pending outbox from a previous logged-in session.
+  api=server();getPlan(api.row.state).items[0]={done:true,note:'shared check-in'};
+  const pendingStorage=new Map([['grace-practice-sync-outbox-v2', JSON.stringify([{path:['days','2026-10-13','plans','U','journal','next'],value:'pending local',id:'pending-1'}])]]);
+  viewer=client(api,{state:empty(),loggedIn:false,storage:pendingStorage});await viewer.fire('DOMContentLoaded');
+  assert.equal(getPlan(viewer.local()).items[0].done,true);assert.equal(api.writes,0);
+  assert.ok(pendingStorage.has('grace-practice-sync-outbox-v2'));
+  console.log('PASS password not required for cloud reads, logged-out writes prohibited');
+
+  // An unavailable real endpoint must never be mistaken for a successful
+  // empty response or acknowledged upload. Both local record and queue survive.
+  api=server();child=client(api);await child.fire('DOMContentLoaded');
+  child.edit(state=>getPlan(state).items[0]={done:true,note:'do not lose this'});
+  api.fetch=async()=>{throw new TypeError('Failed to fetch');};
+  // Clients capture their fetch function at construction, so reuse an offline
+  // client with an endpoint-like failure from the outset.
+  const failApi={fetch:api.fetch};
+  child=client(failApi,{state:child.local(),storage:child.storage});await child.fire('DOMContentLoaded');
+  assert.equal(getPlan(child.local()).items[0].note,'do not lose this');
+  assert.match(child.status(),/共享云端暂时不可用/);assert.match(child.status(),/本机修改已保留/);
+  assert.ok(child.storage.has('grace-practice-sync-outbox-v2'));
+  console.log('PASS unavailable project preserves pending records with an explicit warning');
+
+  for (const [body, message] of [['permission denied','权限配置未完成'], ['PGRST205: missing table','打卡表尚未配置']]) {
+    const blockedApi={fetch:async(url,options)=>{
+      assert.ok(options.headers.apikey.startsWith('sb_publishable_'));
+      assert.equal(options.headers.Authorization,undefined);
+      return {ok:false,status:body.includes('PGRST')?404:403,text:async()=>body};
+    }};
+    viewer=client(blockedApi,{loggedIn:false});await viewer.fire('DOMContentLoaded');assert.ok(viewer.status().includes(message));
+  }
+  console.log('PASS API-key format and permission/table diagnostics');
   console.log('All tests use a simulated cloud; no real practice records were modified.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

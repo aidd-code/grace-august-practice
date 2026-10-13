@@ -384,7 +384,7 @@
         <button class="ghost-btn" id="openAll" type="button">展开全部</button>
         <button class="ghost-btn edit-only" id="dataBtn" type="button">备份数据</button>
       </div>
-      <div class="readonly-note">当前是只读浏览模式。输入密码登录后，才可以填写、打卡、计时和管理乐谱。</div>
+      <div class="readonly-note">未登录也可以查看云端打卡和提醒；输入密码后，才可以填写、打卡、计时和管理乐谱。请确认下方显示“双方记录已同步”。</div>
       <div class="sync-status-panel" id="syncStatusPanel" data-state="local" role="status"><span id="syncStatusText">正在连接双方共享记录…</span><button class="save-retry" id="syncRefresh" type="button">同步更新</button></div>
 
       <section class="discovery-panel" id="discoveryPanel" aria-label="今日发现与昨天的提醒"></section>
@@ -393,7 +393,7 @@
 
       <section class="journal">
         <h3>今日练习小记</h3>
-        <p class="journal-intro">把“练了多久”变成“今天学会了什么”。内容会自动保存到云端，老师和学生打开同一网页即可共享。</p>
+        <p class="journal-intro">把“练了多久”变成“今天学会了什么”。输入后先保存在本机，再自动同步到云端；显示“双方记录已同步”后，其他设备才能看到。</p>
         <div class="journal-grid" id="journalGrid"></div>
         <div class="save-note" id="cloudSaveStatus" data-state="local" role="status"><span id="cloudSaveText">保存到：Supabase 云端共享记录 · 正在连接</span><button class="save-retry" id="cloudSaveRetry" type="button">同步更新</button></div>
       </section>
@@ -1503,7 +1503,7 @@
   </script>
   <script src="local-auth.js?v=20260727-1"></script>
   <script src="score-collab.js?v=20260729-9"></script>
-  <script src="practice-sync.js?v=20261013-2"></script>
+  <script src="practice-sync.js?v=20261013-3"></script>
   <script type="module" src="grace-cloud.js?v=20260806-16"></script>
 </body>
 </html>

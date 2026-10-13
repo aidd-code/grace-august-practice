@@ -248,6 +248,11 @@
     .save-note[data-state="saving"] { color:var(--peach) }
     .save-note[data-state="saved"] { color:var(--sage) }
     .save-note[data-state="error"] { color:#9b4d4d }
+    .sync-status-panel{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 30px;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:#f2f7f3;color:#466151;font-size:13px}
+    .sync-status-panel span{flex:1;min-width:170px}
+    .sync-status-panel[data-state="error"]{background:#fff0e9;color:#8a4e4e}
+    .sync-status-panel[data-state="local"],.sync-status-panel[data-state="saving"]{background:#fff8e8;color:#775d32}
+    @media(max-width:600px){.sync-status-panel{margin:14px 18px}}
     .save-retry{min-height:30px;padding:0 10px;border:0;border-radius:9px;color:var(--purple-dark);background:#eee8f1;font-size:12px;font-weight:800;cursor:pointer}
     .save-retry:disabled{opacity:.55;cursor:wait}.save-note[data-state="error"] .save-retry{color:#8a4e4e;background:#f5e8e8}
 
@@ -380,6 +385,7 @@
         <button class="ghost-btn edit-only" id="dataBtn" type="button">备份数据</button>
       </div>
       <div class="readonly-note">当前是只读浏览模式。输入密码登录后，才可以填写、打卡、计时和管理乐谱。</div>
+      <div class="sync-status-panel" id="syncStatusPanel" data-state="local" role="status"><span id="syncStatusText">正在连接双方共享记录…</span><button class="save-retry" id="syncRefresh" type="button">同步更新</button></div>
 
       <section class="discovery-panel" id="discoveryPanel" aria-label="今日发现与昨天的提醒"></section>
 
@@ -389,7 +395,7 @@
         <h3>今日练习小记</h3>
         <p class="journal-intro">把“练了多久”变成“今天学会了什么”。内容会自动保存到云端，老师和学生打开同一网页即可共享。</p>
         <div class="journal-grid" id="journalGrid"></div>
-        <div class="save-note" id="cloudSaveStatus" data-state="local" role="status"><span id="cloudSaveText">保存到：Supabase 云端共享记录 · 正在连接</span><button class="save-retry edit-only" id="cloudSaveRetry" type="button">立即保存</button></div>
+        <div class="save-note" id="cloudSaveStatus" data-state="local" role="status"><span id="cloudSaveText">保存到：Supabase 云端共享记录 · 正在连接</span><button class="save-retry" id="cloudSaveRetry" type="button">同步更新</button></div>
       </section>
     </section>
 
@@ -923,15 +929,23 @@
     window.graceSelectedDay = () => selectedDay;
     window.graceSelectedDate = () => selectedDay;
     window.graceGetPracticeState = () => JSON.parse(JSON.stringify(state));
+    window.gracePracticeSyncBusy = () => Boolean(voiceSession || activeTimer !== null ||
+      document.getElementById("planModal")?.classList.contains("show") ||
+      document.activeElement?.matches("textarea, input:not([type=checkbox])"));
     window.graceApplyPracticeState = cloudState => {
       if (!cloudState?.days || !cloudState?.typeOverrides) return false;
-      if (voiceSession) return false;
-      stopTimer();
-      state = cloudState;
+      if (window.gracePracticeSyncBusy()) return false;
+      const openIndexes = [...document.querySelectorAll(".practice-card.open")].map(card => Number(card.dataset.index));
+      state = JSON.parse(JSON.stringify(cloudState));
       const migrated = migrateDailyPlans(state);
       selectedType = initialPlanType(selectedDay);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+      catch { showToast("本机空间不足，请导出备份；云端记录仍可查看"); }
       renderCalendar(); renderDay();
+      openIndexes.forEach(index => {
+        const card = document.querySelector(`.practice-card[data-index="${index}"]`);
+        card?.classList.add("open"); card?.querySelector(".card-summary").setAttribute("aria-expanded", "true");
+      });
       if (migrated && window.graceIsLoggedIn?.()) setTimeout(saveState, 0);
       return true;
     };
@@ -1482,13 +1496,14 @@
     document.addEventListener("visibilitychange", () => { if (document.hidden) { stopTimer(); stopVoiceRecording(voiceSession?.pending); } });
     window.addEventListener("beforeunload", () => { stopVoiceRecording(true); saveState(); });
     document.getElementById("cloudSaveRetry").addEventListener("click", () => window.dispatchEvent(new Event("grace:practice-save-retry")));
+    document.getElementById("syncRefresh").addEventListener("click", () => window.dispatchEvent(new Event("grace:practice-save-retry")));
 
     renderCalendar();
     renderDay();
   </script>
   <script src="local-auth.js?v=20260727-1"></script>
   <script src="score-collab.js?v=20260729-9"></script>
-  <script src="practice-sync.js?v=20260729-3"></script>
+  <script src="practice-sync.js?v=20261013-2"></script>
   <script type="module" src="grace-cloud.js?v=20260806-16"></script>
 </body>
 </html>

@@ -20,7 +20,7 @@
     }
 
     const saveButton = document.getElementById("cloudSaveRetry");
-    if (saveButton) saveButton.disabled = !loggedIn;
+    if (saveButton) saveButton.disabled = document.getElementById("cloudSaveStatus")?.dataset.state === "saving";
 
     window.dispatchEvent(new CustomEvent("grace:auth-changed", {
       detail: {loggedIn}

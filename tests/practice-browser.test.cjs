@@ -11,7 +11,7 @@ const today = new Date();
 const day = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 const template = Array.from({length:3}, (_,index) => ({title:`练习 ${index+1}`,minutes:5,translation:'练习说明',tasks:['音准','节奏']}));
 let row = {updated_at:'2026-10-13T00:00:00.000Z',state:{days:{[day]:{plans:{U:{
-  planSnapshot:template,items:{0:{done:true},1:{checks:{0:true}},2:{note:'原有笔记'}},journal:{}
+  planSnapshot:template,items:{0:{done:true},1:{checks:{0:true}},2:{note:'原有笔记'}}
 }}}},typeOverrides:{},newPlanVersion:4,unifiedPlanVersion:6,practiceContentVersion:3}};
 let offline = false, writes = 0;
 const errors = [];

@@ -385,7 +385,7 @@
         <button class="ghost-btn edit-only" id="dataBtn" type="button">备份数据</button>
       </div>
       <div class="readonly-note">未登录也可以查看云端打卡和提醒；输入密码后，才可以填写、打卡、计时和管理乐谱。请确认下方显示“双方记录已同步”。</div>
-      <div class="sync-status-panel" id="syncStatusPanel" data-state="local" role="status"><span id="syncStatusText">正在连接双方共享记录…</span><button class="save-retry" id="syncRefresh" type="button">同步更新</button></div>
+      <div class="sync-status-panel" id="syncStatusPanel" data-state="local" role="status"><span id="syncStatusText">正在后台连接云端，不影响登录打卡…</span><button class="save-retry" id="syncRefresh" type="button" hidden>重试连接</button></div>
 
       <section class="discovery-panel" id="discoveryPanel" aria-label="今日发现与昨天的提醒"></section>
 
@@ -395,7 +395,7 @@
         <h3>今日练习小记</h3>
         <p class="journal-intro">把“练了多久”变成“今天学会了什么”。输入后先保存在本机，再自动同步到云端；显示“双方记录已同步”后，其他设备才能看到。</p>
         <div class="journal-grid" id="journalGrid"></div>
-        <div class="save-note" id="cloudSaveStatus" data-state="local" role="status"><span id="cloudSaveText">保存到：Supabase 云端共享记录 · 正在连接</span><button class="save-retry" id="cloudSaveRetry" type="button">同步更新</button></div>
+        <div class="save-note" id="cloudSaveStatus" data-state="local" role="status"><span id="cloudSaveText">本机自动保存 · 正在后台连接云端</span><button class="save-retry" id="cloudSaveRetry" type="button" hidden>重试连接</button></div>
       </section>
     </section>
 
@@ -833,9 +833,15 @@
     }
     function getItem(day, index, create = true, type = selectedType) {
       const existing = getPlanDay(day, type, false)?.items?.[index];
-      if (existing || !create) return existing || { done: false, seconds: 0, checks: {}, note: "", answer: "" };
+      // Cloud merges intentionally omit empty defaults. A partial record such
+      // as {done:true} is valid and must never break rendering or the timer.
+      const item = {done:false, seconds:0, note:"", answer:"", ...existing,
+        checks:existing?.checks && typeof existing.checks === "object" ? existing.checks : {}};
+      if (!create) return item;
       const planDay = getPlanDay(day, type);
-      planDay.items[index] = { done: false, seconds: 0, checks: {}, note: "", answer: "" };
+      planDay.items ||= {};
+      if (existing) Object.assign(existing, item);
+      else planDay.items[index] = item;
       return planDay.items[index];
     }
     function escapeHtml(value = "") {
@@ -1503,7 +1509,7 @@
   </script>
   <script src="local-auth.js?v=20260727-1"></script>
   <script src="score-collab.js?v=20260729-9"></script>
-  <script src="practice-sync.js?v=20261013-3"></script>
+  <script src="practice-sync.js?v=20261016-1"></script>
   <script type="module" src="grace-cloud.js?v=20260806-16"></script>
 </body>
 </html>

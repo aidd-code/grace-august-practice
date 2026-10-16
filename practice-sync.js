@@ -168,7 +168,11 @@
     }
     for (const id of ["cloudSaveRetry", "syncRefresh"]) {
       const button = document.getElementById(id);
-      if (button) { button.disabled = state === "saving"; button.textContent = state === "error" ? "重试同步" : "同步更新"; }
+      if (button) {
+        button.hidden = state !== "error";
+        button.disabled = false;
+        button.textContent = "重试连接";
+      }
     }
   }
   async function request(url, options = {}) {
@@ -177,7 +181,7 @@
     try {
       const response = await fetch(base + url, {...options, signal:controller.signal, cache:"no-store", headers:{...headers, ...(options.headers || {})}});
       if (!response.ok) throw new Error("HTTP " + response.status + ": " + (await response.text()).slice(0,200));
-      return response.status === 204 ? null : response.json();
+      return response.status === 204 ? null : await response.json();
     } finally { clearTimeout(timeout); }
   }
   async function readRow() {
@@ -252,7 +256,7 @@
         setStatus("local", window.graceIsLoggedIn?.() ? "本机修改已保留，正在继续同步…" : "有本机修改尚未上传 · 登录后自动同步");
         if (window.graceIsLoggedIn?.()) scheduleSync();
       } else if (!applied) setStatus("saved", "已收到云端更新 · 结束输入、计时或录音后显示 · " + time);
-      else setStatus("saved", "双方记录已同步 · " + time + " · 页面打开时每 5 秒更新");
+      else setStatus("saved", "双方记录已同步 · 自动保存，无需手动操作 · " + time);
     } catch (error) {
       console.warn("Practice shared sync failed", error);
       // Keep the local outbox intact. A missing/paused Supabase project is
